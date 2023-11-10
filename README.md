@@ -1,11 +1,14 @@
 <div align="center">
-  <img src="https://github-readme-stats.vercel.app/api?hide_title=false&hide_rank=false&show_icons=true&include_all_commits=true&count_private=true&disable_animations=false&theme=dark&locale=en&hide_border=false&username=rios0rios0" height="150" alt="stats graph"  />
-  <img src="https://github-readme-stats.vercel.app/api/top-langs?locale=en&hide_title=false&layout=compact&card_width=320&langs_count=8&theme=dark&hide_border=false&username=rios0rios0" height="150" alt="languages graph"  />
+  <img src="https://github-readme-stats.vercel.app/api?hide_title=false&hide_rank=true&show_icons=true&include_all_commits=true&count_private=true&disable_animations=false&theme=dark&locale=en&hide_border=false&username=rios0rios0" height="150" alt="stats graph"  />
+  <img src="https://github-readme-stats.vercel.app/api/top-langs?locale=en&hide_title=false&layout=compact&card_width=320&langs_count=8&theme=dark&hide_border=false&username=rios0rios0" height="150" alt="languages graph"  />	
+</div>
+<div align="center">
+	<a href="https://wakatime.com/@e4cd3cdc-5afe-4c7f-ac43-ddbd8f02ea0a"><img src="https://wakatime.com/badge/user/e4cd3cdc-5afe-4c7f-ac43-ddbd8f02ea0a.svg?style=flat-square" alt="Total time coded since Jun 20 2023" /></a>
 </div>
 
 ---
 
-🧰 Toolbox
+:wrench: Toolbox
 
 <div align="center">
   <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/amazonwebservices/amazonwebservices-plain-wordmark.svg" height="40" width="52" alt="amazonwebservices logo"  />
@@ -36,7 +39,6 @@
   <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/mysql/mysql-original-wordmark.svg" height="40" width="52" alt="mysql logo"  />
   <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nginx/nginx-original.svg" height="40" width="52" alt="nginx logo"  />
   <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nodejs/nodejs-original-wordmark.svg" height="40" width="52" alt="nodejs logo"  />
-  <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/opera/opera-plain-wordmark.svg" height="40" width="52" alt="opera logo"  />
   <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/php/php-plain.svg" height="40" width="52" alt="php logo"  />
   <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/postgresql/postgresql-plain-wordmark.svg" height="40" width="52" alt="postgresql logo"  />
   <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original-wordmark.svg" height="40" width="52" alt="python logo"  />
@@ -52,13 +54,9 @@
   <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/yarn/yarn-original-wordmark.svg" height="40" width="52" alt="yarn logo"  />
 </div>
 
-###
-
-<img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/output/snake.svg" alt="snake animation" />
-
 ---
 
-Social Networks
+:speech_balloon: Social Networks
 
 <div align="center">
   <a href="https://linkedin.com/in/rios0rios0" target="_blank">
@@ -74,8 +72,8 @@ Social Networks
 
 ###
 
-<div style="text-align: center">
-  <img src="https://profile-counter.glitch.me/rios0rios0/count.svg?" alt="profile visits"/>
+<div align="center">
+	<img src="https://profile-counter.glitch.me/rios0rios0/count.svg?" alt="profile visits"/>
 </div>
 
 ###
