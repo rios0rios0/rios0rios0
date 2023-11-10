@@ -1,4 +1,4 @@
-module github.com/rios0rios0/calendar
+module github.com/sant0x00/calendar
 
 go 1.20
 

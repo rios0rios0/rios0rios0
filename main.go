@@ -2,16 +2,11 @@ package main
 
 import (
 	"fmt"
-	"image/png"
 	"os"
 	"time"
 
 	svg "github.com/ajstarks/svgo"
 	"github.com/xanzy/go-gitlab"
-	"gonum.org/v1/plot"
-	"gonum.org/v1/plot/heat"
-	"gonum.org/v1/plot/palette"
-	"gonum.org/v1/plot/vg/vgimg"
 )
 
 const (
@@ -116,53 +111,53 @@ func createHeatmapSVG(contributions []Contribution, filename string) error {
 	return nil
 }
 
-func createHeatmapPNG(contributions []Contribution, filename string) error {
-	p, err := plot.New()
-	if err != nil {
-		return err
-	}
+//func createHeatmapPNG(contributions []Contribution, filename string) error {
+//	p, err := plot.New()
+//	if err != nil {
+//		return err
+//	}
+//
+//	// Convert the contributions to a heat.Map
+//	contributionData := contributionsToHeatMap(contributions)
+//	h := heat.New(contributionData, heat.Palette(palette.Magma()), heat.Min(0), heat.Max(contributionData.Max()))
+//	p.Add(h)
+//
+//	// Save the plot to a PNG file
+//	img := vgimg.New(p.DefaultWidth(), p.DefaultHeight())
+//	dc := img.Renderer()
+//	p.Draw(dc)
+//	imgFile, err := os.Create(filename)
+//	if err != nil {
+//		return err
+//	}
+//	defer imgFile.Close()
+//
+//	return png.Encode(imgFile, img.Image())
+//}
+//
+//func contributionsToHeatMap(contributions []Contribution) *heat.Map {
+//	data := make([][]float64, 0)
+//	for _, contribution := range contributions {
+//		date, err := time.Parse("2006-01-02", contribution.Date)
+//		if err != nil {
+//			continue
+//		}
+//
+//		x, y := dateToCoordinates(date)
+//		for len(data) <= x {
+//			data = append(data, make([]float64, 0))
+//		}
+//		for len(data[x]) <= y {
+//			data[x] = append(data[x], 0)
+//		}
+//		data[x][y] = float64(contribution.Count)
+//	}
+//
+//	return heat.NewMap(data)
+//}
 
-	// Convert the contributions to a heat.Map
-	contributionData := contributionsToHeatMap(contributions)
-	h := heat.New(contributionData, heat.Palette(palette.Magma()), heat.Min(0), heat.Max(contributionData.Max()))
-	p.Add(h)
-
-	// Save the plot to a PNG file
-	img := vgimg.New(p.DefaultWidth(), p.DefaultHeight())
-	dc := img.Renderer()
-	p.Draw(dc)
-	imgFile, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer imgFile.Close()
-
-	return png.Encode(imgFile, img.Image())
-}
-
-func contributionsToHeatMap(contributions []Contribution) *heat.Map {
-	data := make([][]float64, 0)
-	for _, contribution := range contributions {
-		date, err := time.Parse("2006-01-02", contribution.Date)
-		if err != nil {
-			continue
-		}
-
-		x, y := dateToCoordinates(date)
-		for len(data) <= x {
-			data = append(data, make([]float64, 0))
-		}
-		for len(data[x]) <= y {
-			data[x] = append(data[x], 0)
-		}
-		data[x][y] = float64(contribution.Count)
-	}
-
-	return heat.NewMap(data)
-}
-
-func dateToCoordinates(date time.Time) (int, int) {
-	year, week := date.ISOWeek()
-	day := int(date.Weekday())
-	return year*53 + week, day
-}
+//func dateToCoordinates(date time.Time) (int, int) {
+//	year, week := date.ISOWeek()
+//	day := int(date.Weekday())
+//	return year*53 + week, day
+//}
