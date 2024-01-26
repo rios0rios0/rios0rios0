@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -63,17 +65,17 @@ func FetchGitLabUserStats(username, gitLabToken string) (*GitLabUserStats, error
 
 	userID := users[0].ID
 
-	// Initialize counters
+	// initialize counters
 	totalEvents := 0
 	totalCommits := 0
 	totalIssues := 0
 	totalMergeRequests := 0
 
-	// Fetch the user events for the last year
+	// fetch the user events for the last year
 	now := time.Now()
 	oneYearAgo := now.AddDate(-1, 0, 0)
 	page := 1
-	pageSize := 100 // Adjust pageSize as needed
+	pageSize := 100 // adjust pageSize as needed
 
 	for {
 		eventsURL := fmt.Sprintf("https://gitlab.com/api/v4/users/%d/events?after=%s&before=%s&page=%d&per_page=%d", userID, oneYearAgo.Format("2006-01-02"), now.Format("2006-01-02"), page, pageSize)
@@ -132,7 +134,7 @@ func FetchGitLabUserStats(username, gitLabToken string) (*GitLabUserStats, error
 		page++
 	}
 
-	// Construct the user stats
+	// construct the user stats
 	stats := GitLabUserStats{
 		Name:               users[0].Name,
 		Username:           username,
@@ -153,8 +155,9 @@ func GenerateSVG(stats *GitLabUserStats, templatePath, outputPath string) error 
 		return err
 	}
 
+	printer := message.NewPrinter(language.English)
 	// fill the template with stats data
-	svgContent := fmt.Sprintf(string(templateContent),
+	svgContent := printer.Sprintf(string(templateContent),
 		stats.Name+"' GitLab Stats",
 		stats.TotalCommits,
 		stats.TotalMergeRequests,

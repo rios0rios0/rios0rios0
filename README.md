@@ -1,14 +1,12 @@
 <div align="center">
   <img src="https://github-readme-stats.vercel.app/api?hide_title=false&hide_rank=true&show_icons=true&include_all_commits=true&count_private=true&disable_animations=false&theme=dark&locale=en&hide_border=false&username=rios0rios0" height="150" alt="github stats graph" />
   <img src="https://github-readme-stats.vercel.app/api/top-langs?locale=en&hide_title=false&layout=compact&card_width=320&langs_count=8&theme=dark&hide_border=false&username=rios0rios0" height="150" alt="languages graph" />
-	<img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/output/gitlab_stats_final.svg" height="150" alt="gitlab stats graph" />
+	<img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/gitlab-stats/gitlab_stats_final.svg" height="150" alt="gitlab stats graph" />
 </div>
 
 ---
 
-<div align="center">
-	<h2>:hammer_and_wrench: Mainly Working With :hammer_and_pick:</h2>
-</div>
+<div align="center"><h3>Main Skills</h3></div>
 <table>
   <tr>
     <th>Engineering Tools</th>
@@ -19,23 +17,23 @@
     <th>Security and Compliance</th>
   </tr>
   <tr>
-    <td>
+    <td align="center">
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/git/git-original-wordmark.svg" height="40" width="52" alt="git logo" />
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/gitlab/gitlab-plain-wordmark.svg" height="40" width="52" alt="gitlab logo" />
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/github/github-original-wordmark.svg" height="40" width="52" alt="github logo" />
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/bitbucket/bitbucket-original-wordmark.svg" height="40" width="52" alt="bitbucket logo" />
     </td>
-    <td>
+    <td align="center">
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/amazonwebservices/amazonwebservices-plain-wordmark.svg" height="40" width="52" alt="amazonwebservices logo" />
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/azure/azure-original-wordmark.svg" height="40" width="52" alt="azure logo" />
     </td>
-    <td>
+    <td align="center">
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/docker/docker-original-wordmark.svg" height="40" width="52" alt="docker logo" />
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/kubernetes/kubernetes-plain-wordmark.svg" height="40" width="52" alt="kubernetes logo" />
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/apachekafka/apachekafka-original-wordmark.svg" height="40" width="52" alt="apachekafka logo" />
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nginx/nginx-original.svg" height="40" width="52" alt="nginx logo" />
     </td>
-    <td>
+    <td align="center">
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/go/go-original-wordmark.svg" height="40" width="52" alt="go logo" />
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/java/java-original-wordmark.svg" height="40" width="52" alt="java logo" />
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/spring/spring-original-wordmark.svg" height="40" width="52" alt="spring logo" />
@@ -52,13 +50,13 @@
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/yarn/yarn-original-wordmark.svg" height="40" width="52" alt="yarn logo" />
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/csharp/csharp-plain.svg" height="40" width="52" alt="csharp logo" />
     </td>
-    <td>
+    <td align="center">
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/mysql/mysql-original-wordmark.svg" height="40" width="52" alt="mysql logo" />
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/postgresql/postgresql-plain-wordmark.svg" height="40" width="52" alt="postgresql logo" />
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/microsoftsqlserver/microsoftsqlserver-plain-wordmark.svg" height="40" width="52" alt="microsoftsqlserver logo" />
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/redis/redis-original-wordmark.svg" height="40" width="52" alt="redis logo" />
     </td>
-    <td>
+    <td align="center">
   		<img src="https://owasp.org/assets/images/logo.png" width="80" alt="owasp logo" />
 			<img src="https://dependencytrack.org/assets/images/dt-logo-white-text.svg" width="80" alt="dependency track logo" />
 			<img src="https://assets-eu-01.kc-usercontent.com/d0f02280-9dfb-0116-f970-137d713003b6/9fbbc2c0-4a63-4f7a-b14e-1ee330a7fc32/SonarQube_logo_black.svg?w=190&h=52&auto=format&fit=crop" width="80" alt="sonarqube logo" />
@@ -68,10 +66,7 @@
   </tr>
 </table>
 
-<div align="center">
-	<h2>:wrench: Secondarily With :gear:</h2>
-</div>
-
+<div align="center"><h3>Side Skills</h3></div>
 <table>
   <tr>
     <th>Frontend and Mobile Technologies</th>
@@ -81,13 +76,13 @@
   </tr>
   <tr>
     <td></td>
-		<td>
+		<td align="center">
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/linux/linux-original.svg" height="40" width="52" alt="linux logo" />
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/debian/debian-plain-wordmark.svg" height="40" width="52" alt="debian logo" />
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/ubuntu/ubuntu-plain-wordmark.svg" height="40" width="52" alt="ubuntu logo" />
     </td>
 		<td></td>
-		<td>
+		<td align="center">
 			<img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/slack/slack-original-wordmark.svg" height="40" width="52" alt="slack logo" />
   		<img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/jira/jira-original-wordmark.svg" height="40" width="52" alt="jira logo" />
   		<img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/trello/trello-plain-wordmark.svg" height="40" width="52" alt="trello logo" />
