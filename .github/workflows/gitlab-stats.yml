@@ -11,8 +11,6 @@ jobs:
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@v2'
-        with:
-          ref: 'output' # checkout the 'output' branch
 
       - name: 'Set up Go'
         uses: 'actions/setup-go@v2'
@@ -22,7 +20,7 @@ jobs:
       - name: 'Get GitLab Stats'
         env:
           GITLAB_TOKEN: '${{ secrets.GITLAB_TOKEN }}'
-          GITLAB_USERNAME: 'rios0rios0'
+          GITLAB_USERNAME: '${{ secrets.GITLAB_USERNAME }}'
         run: |
           go run main.go
 
@@ -30,6 +28,6 @@ jobs:
         run: |
           git config --global user.name 'GitLab Stats Workflow'
           git config --global user.email 'rios0rios0@outlook.com'
-          git add .
-          git commit --amend --no-edit
-          git push -f origin output
+          git add gitlab_stats_final.svg
+          git commit -m "Deploy to GitHub Pages" --amend --no-edit
+          git push -f origin HEAD:output
