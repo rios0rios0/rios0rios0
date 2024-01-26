@@ -23,7 +23,7 @@ type GitLabUserStats struct {
 }
 
 // FetchGitLabUserStats fetches the user stats from GitLab
-func FetchGitLabUserStats(username, gitLabToken string) (*GitLabUserStats, error) {
+func FetchGitLabUserStats(username, accessToken string) (*GitLabUserStats, error) {
 	// Fetch the user ID
 	userURL := fmt.Sprintf("https://gitlab.com/api/v4/users?username=%s", username)
 
@@ -32,7 +32,7 @@ func FetchGitLabUserStats(username, gitLabToken string) (*GitLabUserStats, error
 		return nil, err
 	}
 
-	req.Header.Add("PRIVATE-TOKEN", gitLabToken)
+	req.Header.Add("PRIVATE-TOKEN", accessToken)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -66,7 +66,6 @@ func FetchGitLabUserStats(username, gitLabToken string) (*GitLabUserStats, error
 	userID := users[0].ID
 
 	// initialize counters
-	totalEvents := 0
 	totalCommits := 0
 	totalIssues := 0
 	totalMergeRequests := 0
@@ -85,7 +84,7 @@ func FetchGitLabUserStats(username, gitLabToken string) (*GitLabUserStats, error
 			return nil, err
 		}
 
-		eventsReq.Header.Add("PRIVATE-TOKEN", gitLabToken)
+		eventsReq.Header.Add("PRIVATE-TOKEN", accessToken)
 
 		eventsResp, err := client.Do(eventsReq)
 		if err != nil {
@@ -117,7 +116,6 @@ func FetchGitLabUserStats(username, gitLabToken string) (*GitLabUserStats, error
 		if len(events) == 0 {
 			break // Exit the loop if no more events
 		}
-		totalEvents += len(events)
 
 		for _, event := range events {
 			switch event.TargetType {
@@ -141,7 +139,7 @@ func FetchGitLabUserStats(username, gitLabToken string) (*GitLabUserStats, error
 		TotalCommits:       totalCommits,
 		TotalIssues:        totalIssues,
 		TotalMergeRequests: totalMergeRequests,
-		TotalContributions: totalEvents,
+		TotalContributions: totalCommits + totalIssues + totalMergeRequests,
 	}
 
 	return &stats, nil
@@ -170,15 +168,15 @@ func GenerateSVG(stats *GitLabUserStats, templatePath, outputPath string) error 
 }
 
 func main() {
-	gitLabToken := os.Getenv("GITLAB_TOKEN")
 	gitLabUsername := os.Getenv("GITLAB_USERNAME")
+	gitLabAccessToken := os.Getenv("GITLAB_ACCESS_TOKEN")
 
-	if gitLabToken == "" || gitLabUsername == "" {
-		fmt.Println("GITLAB_TOKEN and GITLAB_USERNAME environment variables are required")
+	if gitLabUsername == "" || gitLabAccessToken == "" {
+		fmt.Println("GITLAB_USERNAME and GITLAB_ACCESS_TOKEN environment variables are required")
 		os.Exit(1)
 	}
 
-	stats, err := FetchGitLabUserStats(gitLabUsername, gitLabToken)
+	stats, err := FetchGitLabUserStats(gitLabUsername, gitLabAccessToken)
 	if err != nil {
 		fmt.Println("Error fetching GitLab user stats:", err)
 		os.Exit(1)

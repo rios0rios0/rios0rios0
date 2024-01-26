@@ -19,8 +19,8 @@ jobs:
 
       - name: 'Get GitLab Stats'
         env:
-          GITLAB_TOKEN: '${{ secrets.GITLAB_TOKEN }}'
           GITLAB_USERNAME: '${{ secrets.GITLAB_USERNAME }}'
+          GITLAB_ACCESS_TOKEN: '${{ secrets.GITLAB_ACCESS_TOKEN }}'
         run: |
           go run main.go
 
