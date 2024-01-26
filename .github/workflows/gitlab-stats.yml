@@ -3,6 +3,7 @@ name: 'GitLab Stats'
 on:
   schedule:
     - cron: '0 0 * * *' # runs every day at midnight
+  workflow_dispatch: # allows manual triggering of the workflow
 
 jobs:
   update-stats:
