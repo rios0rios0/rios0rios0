@@ -1,0 +1,34 @@
+name: 'GitLab Stats'
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # runs every day at midnight
+
+jobs:
+  update-stats:
+    runs-on: 'ubuntu-latest'
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@v2'
+        with:
+          ref: 'output' # checkout the 'output' branch
+
+      - name: 'Set up Go'
+        uses: 'actions/setup-go@v2'
+        with:
+          go-version: '1.20'
+
+      - name: 'Get GitLab Stats'
+        env:
+          GITLAB_TOKEN: '${{ secrets.GITLAB_TOKEN }}'
+          GITLAB_USERNAME: 'rios0rios0'
+        run: |
+          go run main.go
+
+      - name: 'Commit and Push'
+        run: |
+          git config --global user.name 'GitLab Stats Workflow'
+          git config --global user.email 'rios0rios0@outlook.com'
+          git add .
+          git commit --amend --no-edit
+          git push -f origin output

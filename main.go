@@ -1,168 +1,191 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
-	"image/png"
+	"io/ioutil"
+	"net/http"
 	"os"
+	"strings"
 	"time"
-
-	svg "github.com/ajstarks/svgo"
-	"github.com/xanzy/go-gitlab"
-	"gonum.org/v1/plot"
-	"gonum.org/v1/plot/heat"
-	"gonum.org/v1/plot/palette"
-	"gonum.org/v1/plot/vg/vgimg"
 )
 
-const (
-	outputFileName = "heatmap.svg"
-)
-
-type Contribution struct {
-	Date  string
-	Count int
+// GitLabUserStats represents the GitLab statistics
+type GitLabUserStats struct {
+	Name               string `json:"name"`
+	Username           string `json:"username"`
+	TotalCommits       int    `json:"total_commits"`
+	TotalIssues        int    `json:"total_issues"`
+	TotalMergeRequests int    `json:"total_merge_requests"`
+	TotalContributions int    `json:"total_contributions"`
 }
 
-func main() {
-	gitlabToken := os.Getenv("GITLAB_TOKEN")
-	git, _ := gitlab.NewClient(gitlabToken)
+// FetchGitLabUserStats fetches the user stats from GitLab
+func FetchGitLabUserStats(username, gitLabToken string) (*GitLabUserStats, error) {
+	// Fetch the user ID
+	userURL := fmt.Sprintf("https://gitlab.com/api/v4/users?username=%s", username)
 
-	contributions, err := fetchContributions(git)
-	if err != nil {
-		fmt.Println("Error fetching contributions:", err)
-		return
-	}
-
-	err = createHeatmapSVG(contributions, outputFileName)
-	if err != nil {
-		fmt.Println("Error creating heatmap SVG:", err)
-		return
-	}
-
-	fmt.Printf("Heatmap created...\n")
-}
-
-func fetchContributions(client *gitlab.Client) ([]Contribution, error) {
-	events, _, err := client.Events.ListCurrentUserContributionEvents(&gitlab.ListContributionEventsOptions{
-		ListOptions: gitlab.ListOptions{
-			PerPage: 100,
-		},
-	})
+	req, err := http.NewRequest("GET", userURL, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	contributions := extractContributionsFromEvents(events)
+	req.Header.Add("PRIVATE-TOKEN", gitLabToken)
 
-	return contributions, nil
-}
-
-func extractContributionsFromEvents(events []*gitlab.ContributionEvent) []Contribution {
-	contribMap := make(map[string]int)
-
-	for _, e := range events {
-		date := e.CreatedAt.Format("2006-01-02")
-		contribMap[date]++
-	}
-
-	var contributions []Contribution
-	for date, count := range contribMap {
-		contributions = append(contributions, Contribution{
-			Date:  date,
-			Count: count,
-		})
-	}
-
-	return contributions
-}
-
-func createHeatmapSVG(contributions []Contribution, filename string) error {
-	width, height := 53*15, 7*15
-	margin := 10
-
-	file, err := os.Create(filename)
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer file.Close()
+	defer resp.Body.Close()
 
-	canvas := svg.New(file)
-	canvas.Start(width+2*margin, height+2*margin)
-	canvas.Rect(0, 0, width+2*margin, height+2*margin, "fill:white")
-	canvas.Translate(margin, margin)
-
-	maxCount := 0
-	for _, c := range contributions {
-		if c.Count > maxCount {
-			maxCount = c.Count
-		}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("error fetching user: status code %d", resp.StatusCode)
 	}
 
-	for i, c := range contributions {
-		x := (i % 53) * 15
-		y := (i / 53) * 15
-		date, _ := time.Parse("2006-01-02", c.Date)
-
-		alpha := float64(c.Count) / float64(maxCount)
-		color := fmt.Sprintf("rgba(37, 118, 188, %.2f)", alpha)
-
-		canvas.Rect(x, y, 10, 10, fmt.Sprintf("fill:%s", color))
-		canvas.Title(fmt.Sprintf("%s: %d contributions", date.Format("2006-01-02"), c.Count))
-	}
-
-	canvas.Gend()
-	canvas.End()
-
-	return nil
-}
-
-func createHeatmapPNG(contributions []Contribution, filename string) error {
-	p, err := plot.New()
+	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// Convert the contributions to a heat.Map
-	contributionData := contributionsToHeatMap(contributions)
-	h := heat.New(contributionData, heat.Palette(palette.Magma()), heat.Min(0), heat.Max(contributionData.Max()))
-	p.Add(h)
-
-	// Save the plot to a PNG file
-	img := vgimg.New(p.DefaultWidth(), p.DefaultHeight())
-	dc := img.Renderer()
-	p.Draw(dc)
-	imgFile, err := os.Create(filename)
+	var users []struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	}
+	err = json.Unmarshal(body, &users)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer imgFile.Close()
 
-	return png.Encode(imgFile, img.Image())
-}
+	if len(users) == 0 {
+		return nil, fmt.Errorf("user not found")
+	}
 
-func contributionsToHeatMap(contributions []Contribution) *heat.Map {
-	data := make([][]float64, 0)
-	for _, contribution := range contributions {
-		date, err := time.Parse("2006-01-02", contribution.Date)
+	userID := users[0].ID
+
+	// Initialize counters
+	totalEvents := 0
+	totalCommits := 0
+	totalIssues := 0
+	totalMergeRequests := 0
+
+	// Fetch the user events for the last year
+	now := time.Now()
+	oneYearAgo := now.AddDate(-1, 0, 0)
+	page := 1
+	pageSize := 100 // Adjust pageSize as needed
+
+	for {
+		eventsURL := fmt.Sprintf("https://gitlab.com/api/v4/users/%d/events?after=%s&before=%s&page=%d&per_page=%d", userID, oneYearAgo.Format("2006-01-02"), now.Format("2006-01-02"), page, pageSize)
+
+		eventsReq, err := http.NewRequest("GET", eventsURL, nil)
 		if err != nil {
-			continue
+			return nil, err
 		}
 
-		x, y := dateToCoordinates(date)
-		for len(data) <= x {
-			data = append(data, make([]float64, 0))
+		eventsReq.Header.Add("PRIVATE-TOKEN", gitLabToken)
+
+		eventsResp, err := client.Do(eventsReq)
+		if err != nil {
+			return nil, err
 		}
-		for len(data[x]) <= y {
-			data[x] = append(data[x], 0)
+		defer eventsResp.Body.Close()
+
+		if eventsResp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("error fetching user events: status code %d", eventsResp.StatusCode)
 		}
-		data[x][y] = float64(contribution.Count)
+
+		eventsBody, err := ioutil.ReadAll(eventsResp.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		var events []struct {
+			Action     string `json:"action_name"`
+			TargetType string `json:"target_type"`
+			PushData   struct {
+				CommitCount int `json:"commit_count"`
+			} `json:"push_data"`
+		}
+		err = json.Unmarshal(eventsBody, &events)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(events) == 0 {
+			break // Exit the loop if no more events
+		}
+		totalEvents += len(events)
+
+		for _, event := range events {
+			switch event.TargetType {
+			case "Issue":
+				totalIssues++
+			case "MergeRequest":
+				totalMergeRequests++
+			}
+			if strings.Contains(event.Action, "pushed") {
+				totalCommits += event.PushData.CommitCount
+			}
+		}
+
+		page++
 	}
 
-	return heat.NewMap(data)
+	// Construct the user stats
+	stats := GitLabUserStats{
+		Name:               users[0].Name,
+		Username:           username,
+		TotalCommits:       totalCommits,
+		TotalIssues:        totalIssues,
+		TotalMergeRequests: totalMergeRequests,
+		TotalContributions: totalEvents,
+	}
+
+	return &stats, nil
 }
 
-func dateToCoordinates(date time.Time) (int, int) {
-	year, week := date.ISOWeek()
-	day := int(date.Weekday())
-	return year*53 + week, day
+// GenerateSVG generates the SVG for GitLab stats - this will generate the SVG using the provided template
+func GenerateSVG(stats *GitLabUserStats, templatePath, outputPath string) error {
+	// read the SVG template file
+	templateContent, err := os.ReadFile(templatePath)
+	if err != nil {
+		return err
+	}
+
+	// fill the template with stats data
+	svgContent := fmt.Sprintf(string(templateContent),
+		stats.Name+"' GitLab Stats",
+		stats.TotalCommits,
+		stats.TotalMergeRequests,
+		stats.TotalIssues,
+		stats.TotalContributions,
+	)
+
+	// write the processed SVG content to the output file
+	return os.WriteFile(outputPath, []byte(svgContent), 0644)
+}
+
+func main() {
+	gitLabToken := os.Getenv("GITLAB_TOKEN")
+	gitLabUsername := os.Getenv("GITLAB_USERNAME")
+
+	if gitLabToken == "" || gitLabUsername == "" {
+		fmt.Println("GITLAB_TOKEN and GITLAB_USERNAME environment variables are required")
+		os.Exit(1)
+	}
+
+	stats, err := FetchGitLabUserStats(gitLabUsername, gitLabToken)
+	if err != nil {
+		fmt.Println("Error fetching GitLab user stats:", err)
+		os.Exit(1)
+	}
+
+	err = GenerateSVG(stats, "gitlab_stats.svg", "gitlab_stats_final.svg")
+	if err != nil {
+		fmt.Println("Error generating SVG report:", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("SVG generated successfully...")
 }
