@@ -15,7 +15,7 @@
     <th>DevOps & IaC</th>
     <th>Backend Technologies</th>
     <th>Persistence Technologies</th>
-    <th>Operating Systems</th>
+    <th>Security and Compliance</th>
   </tr>
   <tr>
     <td>
@@ -58,10 +58,12 @@
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/redis/redis-original-wordmark.svg" height="40" width="52" alt="redis logo" />
     </td>
     <td>
-      <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/linux/linux-original.svg" height="40" width="52" alt="linux logo" />
-      <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/debian/debian-plain-wordmark.svg" height="40" width="52" alt="debian logo" />
-      <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/ubuntu/ubuntu-plain-wordmark.svg" height="40" width="52" alt="ubuntu logo" />
-    </td>
+  		<img src="https://owasp.org/assets/images/logo.png" width="80" alt="owasp logo" />
+			<img src="https://dependencytrack.org/assets/images/dt-logo-white-text.svg" width="80" alt="dependency track logo" />
+			<img src="https://assets-eu-01.kc-usercontent.com/d0f02280-9dfb-0116-f970-137d713003b6/9fbbc2c0-4a63-4f7a-b14e-1ee330a7fc32/SonarQube_logo_black.svg?w=190&h=52&auto=format&fit=crop" width="80" alt="sonarqube logo" />
+			<img src="https://raw.githubusercontent.com/ZupIT/horusec/main/assets/horusec_logo.png" width="80" alt="horusec logo" />
+			<img src="https://a.storyblok.com/f/151984/300x45/80ef4dbc42/semgrep-logo-light-bg.svg" width="80" alt="semgrep logo" />
+		</td>
   </tr>
 </table>
 
@@ -72,11 +74,17 @@
 <table>
   <tr>
     <th>Frontend and Mobile Technologies</th>
+		<th>Operating Systems</th>
     <th>Embedded Systems</th>
     <th>Collaboration Tools</th>
   </tr>
   <tr>
     <td></td>
+		<td>
+      <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/linux/linux-original.svg" height="40" width="52" alt="linux logo" />
+      <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/debian/debian-plain-wordmark.svg" height="40" width="52" alt="debian logo" />
+      <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/ubuntu/ubuntu-plain-wordmark.svg" height="40" width="52" alt="ubuntu logo" />
+    </td>
 		<td></td>
 		<td>
 			<img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/slack/slack-original-wordmark.svg" height="40" width="52" alt="slack logo" />
