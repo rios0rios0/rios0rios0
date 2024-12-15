@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -45,7 +45,7 @@ func FetchGitLabUserStats(username, accessToken string) (*GitLabUserStats, error
 		return nil, fmt.Errorf("error fetching user: status code %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +96,7 @@ func FetchGitLabUserStats(username, accessToken string) (*GitLabUserStats, error
 			return nil, fmt.Errorf("error fetching user events: status code %d", eventsResp.StatusCode)
 		}
 
-		eventsBody, err := ioutil.ReadAll(eventsResp.Body)
+		eventsBody, err := io.ReadAll(eventsResp.Body)
 		if err != nil {
 			return nil, err
 		}

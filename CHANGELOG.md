@@ -25,3 +25,4 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - corrected the `README.md` to point to the new created stats card
 - corrected the workflow indentation to generate the SVG picture
+- updated GoLang version to 1.23.4 and all dependencies to the latest version

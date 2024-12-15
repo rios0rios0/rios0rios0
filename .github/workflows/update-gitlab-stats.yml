@@ -1,0 +1,37 @@
+name: 'Update GitLab Stats'
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # runs every day at midnight
+  workflow_dispatch: # allows manual triggering of the workflow
+
+jobs:
+  update:
+    runs-on: 'ubuntu-latest'
+
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@v4'
+        with:
+          fetch-depth: 0
+
+      - name: 'Set Up Go'
+        uses: 'actions/setup-go@v4'
+        with:
+          go-version: '1.23.4'
+          cache-dependency-path: go.sum
+
+      - name: 'Run Update Script'
+        env:
+          GITLAB_USERNAME: ${{ secrets.GITLAB_USERNAME }}
+          GITLAB_ACCESS_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
+        run: |
+          go run main.go
+
+      - name: 'Commit and Push Changes'
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add .
+          git commit --amend --message "chore(update): updated repository with latest GitLab stats"
+          git push --force origin HEAD:gitlab-stats
