@@ -20,6 +20,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 - added the boilerplate missing files to the project
 - created GitLab Stats workflow to generate the SVG picture
+- created Azure DevOps Stats workflow to generate the SVG picture
 
 ### Changed
 

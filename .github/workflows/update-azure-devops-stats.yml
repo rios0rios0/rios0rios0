@@ -1,0 +1,39 @@
+name: 'Update Azure DevOps Stats'
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # runs every day at midnight
+  workflow_dispatch: # allows manual triggering of the workflow
+
+jobs:
+  update:
+    runs-on: 'ubuntu-latest'
+    permissions:
+      contents: write
+
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@v4'
+        with:
+          fetch-depth: 0
+
+      - name: 'Set Up Go'
+        uses: 'actions/setup-go@v4'
+        with:
+          go-version: '1.23.4'
+          cache-dependency-path: go.sum
+
+      - name: 'Run Update Script'
+        env:
+          AZURE_DEVOPS_ORG: ${{ secrets.AZURE_DEVOPS_ORG }}
+          AZURE_DEVOPS_ACCESS_TOKEN: ${{ secrets.AZURE_DEVOPS_ACCESS_TOKEN }}
+        run: |
+          go run main.go
+
+      - name: 'Commit and Push Changes'
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add .
+          git commit --amend --message "chore(update): updated repository with latest Azure DevOps stats"
+          git push --force origin HEAD:azure-devops-stats
