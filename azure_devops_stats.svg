@@ -1,5 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="304" height="175" viewBox="0 0 304 175" fill="none" role="img" aria-labelledby="descId">
-	<script xmlns="" async="false" type="text/javascript" src="chrome-extension://kjmoohlgokccodicjjfebfomlbljgfhk/in-page.js"/>
 	<title id="titleId">%[1]s</title>
 	<desc id="descId">Total Commits: %[2]d, Total PRs: %[3]d, Total Work Items: %[4]d, Contributed to (last year): %[5]d</desc>
 	<style>
@@ -141,10 +140,4 @@
 			</g>
 		</svg>
 	</g>
-	<style xmlns="" class="darkreader darkreader--fallback">html, body, body :not(iframe) {
-		background-color: #181a1b !important;
-		border-color: #776e62 !important;
-		color: #e8e6e3 !important;
-		}
-	</style>
 </svg>
