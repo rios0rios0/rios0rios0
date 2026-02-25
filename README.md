@@ -1,3 +1,10 @@
+<p align="center">
+    <a href="https://github.com/rios0rios0/rios0rios0/blob/main/LICENSE">
+        <img src="https://img.shields.io/github/license/rios0rios0/rios0rios0.svg?style=for-the-badge&logo=github" alt="License"/></a>
+    <a href="https://github.com/rios0rios0/rios0rios0/actions/workflows/update-gitlab-stats.yml">
+        <img src="https://img.shields.io/github/actions/workflow/status/rios0rios0/rios0rios0/update-gitlab-stats.yml?branch=main&style=for-the-badge&logo=github" alt="Build Status"/></a>
+</p>
+
 <div align="center">
 	<a href="https://wakatime.com/@e4cd3cdc-5afe-4c7f-ac43-ddbd8f02ea0a">
 		<img src="https://wakatime.com/badge/user/e4cd3cdc-5afe-4c7f-ac43-ddbd8f02ea0a.svg?style=for-the-badge" alt="Total time coded since Jun 20 2023" />
