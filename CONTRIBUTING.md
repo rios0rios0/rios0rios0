@@ -34,5 +34,6 @@ development practices, refer to the **[Development Guide](https://github.com/rio
    ```bash
    go test ./...
    ```
-8. Commit following the [commit conventions](https://github.com/rios0rios0/guide/wiki/Life-Cycle/Git-Flow)
-9. Open a pull request against `main`
+8. Update `CHANGELOG.md` under `[Unreleased]`
+9. Commit following the [commit conventions](https://github.com/rios0rios0/guide/wiki/Life-Cycle/Git-Flow)
+10. Open a pull request against `main`
