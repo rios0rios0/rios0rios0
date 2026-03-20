@@ -687,7 +687,12 @@ func GenerateTokensLineGraph(tokens []TokenUsage, outputPath string) error {
 	n := len(tokens)
 
 	for i, t := range tokens {
-		x := padLeft + int(float64(i)/float64(n-1)*float64(graphW))
+		var x int
+		if n < 2 {
+			x = padLeft
+		} else {
+			x = padLeft + int(float64(i)/float64(n-1)*float64(graphW))
+		}
 		y := padTop + graphH - int(float64(t.Tokens)/float64(maxTokens)*float64(graphH))
 		if i == 0 {
 			pathParts = append(pathParts, fmt.Sprintf("M%d,%d", x, y))
@@ -700,7 +705,12 @@ func GenerateTokensLineGraph(tokens []TokenUsage, outputPath string) error {
 	}
 
 	// Close area path
-	lastX := padLeft + int(float64(n-1)/float64(n-1)*float64(graphW))
+	var lastX int
+	if n < 2 {
+		lastX = padLeft
+	} else {
+		lastX = padLeft + int(float64(n-1)/float64(n-1)*float64(graphW))
+	}
 	areaParts = append(areaParts, fmt.Sprintf("L%d,%d", lastX, padTop+graphH))
 	areaParts = append(areaParts, "Z")
 
@@ -724,8 +734,18 @@ func GenerateTokensLineGraph(tokens []TokenUsage, outputPath string) error {
 		labelCount = n
 	}
 	for i := 0; i < labelCount; i++ {
-		idx := i * (n - 1) / (labelCount - 1)
-		x := padLeft + int(float64(idx)/float64(n-1)*float64(graphW))
+		var idx int
+		if labelCount < 2 {
+			idx = 0
+		} else {
+			idx = i * (n - 1) / (labelCount - 1)
+		}
+		var x int
+		if n < 2 {
+			x = padLeft
+		} else {
+			x = padLeft + int(float64(idx)/float64(n-1)*float64(graphW))
+		}
 		date := tokens[idx].Date
 		if len(date) >= 10 {
 			date = date[5:10] // MM-DD
