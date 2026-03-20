@@ -1,4 +1,4 @@
-name: 'Update GitLab Stats'
+name: 'Update Stats'
 
 on:
   schedule:
@@ -8,6 +8,8 @@ on:
 jobs:
   update:
     runs-on: 'ubuntu-latest'
+    permissions:
+      contents: write
 
     steps:
       - name: 'Checkout'
@@ -18,13 +20,17 @@ jobs:
       - name: 'Set Up Go'
         uses: 'actions/setup-go@v4'
         with:
-          go-version: '1.23.4'
+          go-version: '1.26.1'
           cache-dependency-path: go.sum
 
-      - name: 'Run Update Script'
+      - name: 'Run Stats Generator'
         env:
+          GITHUB_USERNAME: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GITLAB_USERNAME: ${{ secrets.GITLAB_USERNAME }}
           GITLAB_ACCESS_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
+          AZURE_DEVOPS_ORG: ${{ secrets.AZURE_DEVOPS_ORG }}
+          AZURE_DEVOPS_ACCESS_TOKEN: ${{ secrets.AZURE_DEVOPS_ACCESS_TOKEN }}
         run: |
           go run main.go
 
@@ -32,6 +38,7 @@ jobs:
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add .
-          git commit --amend --message "chore(update): updated repository with latest GitLab stats"
-          git push --force origin HEAD:gitlab-stats
+          git add combined_stats_final.svg claude_tokens_final.svg top_languages_final.svg contributions_final.svg
+          git diff --staged --quiet && echo "No changes to commit" && exit 0
+          git commit --amend --message "chore(update): updated repository with latest stats"
+          git push --force origin HEAD:stats
