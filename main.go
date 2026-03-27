@@ -1255,8 +1255,13 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 	padBottom := 40
 	legendHeight := 20
 
-	for startDate.Weekday() != time.Sunday {
-		startDate = startDate.AddDate(0, 0, -1)
+	// For a full calendar-year view (Jan 1 start), do not rewind to the previous
+	// Sunday as that would include days from the previous year.
+	isCalendarYear := startDate.Day() == 1 && startDate.Month() == time.January
+	if !isCalendarYear {
+		for startDate.Weekday() != time.Sunday {
+			startDate = startDate.AddDate(0, 0, -1)
+		}
 	}
 
 	// Find max total count across all days
@@ -1464,7 +1469,7 @@ func renderPlatformLegend(x, y int, platforms []NamedPlatformStats) string {
 	return legend
 }
 
-func renderYearTabs(currentYear int, allYears []int, svgBaseName string) string {
+func renderYearTabs(currentYear int, allYears []int) string {
 	sort.Ints(allYears)
 	var tabs string
 	dx := 0
@@ -1515,7 +1520,8 @@ func main() {
 	// 1. Load existing history
 	history, err := loadStatsHistory(historyPath)
 	if err != nil {
-		fmt.Printf("Warning: could not load history: %v (starting fresh)\n", err)
+		fmt.Fprintf(os.Stderr, "Warning: could not load history from %s: %v\n", historyPath, err)
+		historyPath = historyPath + ".new"
 		history = &StatsHistory{Version: 1}
 	}
 
@@ -1584,22 +1590,25 @@ func main() {
 	sort.Ints(years)
 
 	// 5. Generate per-year SVGs
+	hadErrors := false
 	for _, year := range years {
 		stats := yearlyStats[year]
 		suffix := fmt.Sprintf("_%d.svg", year)
-		yearTabs := renderYearTabs(year, years, "")
+		yearTabs := renderYearTabs(year, years)
 
 		fmt.Printf("Generating SVGs for %d...\n", year)
 
 		// Combined stats
 		if err := GenerateCombinedStatsSVG(stats, yearTabs, filepath.Join(outputDir, "combined_stats"+suffix)); err != nil {
 			fmt.Printf("Error generating combined stats SVG for %d: %v\n", year, err)
+			hadErrors = true
 		}
 
 		// Languages
 		langsByPlatform := aggregateLanguagesByPlatform(stats)
 		if err := GenerateLanguagesBarChart(langsByPlatform, yearTabs, filepath.Join(outputDir, "top_languages"+suffix)); err != nil {
 			fmt.Printf("Error generating languages chart for %d: %v\n", year, err)
+			hadErrors = true
 		}
 
 		// Contribution heatmap
@@ -1607,13 +1616,14 @@ func main() {
 		var startDate, endDate time.Time
 		if year == currentYear {
 			startDate = time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)
-			endDate = now
+			endDate = now.UTC()
 		} else {
 			startDate = time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)
 			endDate = time.Date(year, 12, 31, 23, 59, 59, 0, time.UTC)
 		}
 		if err := GenerateContributionHeatmap(contribsByPlatform, startDate, endDate, yearTabs, filepath.Join(outputDir, "contributions"+suffix)); err != nil {
 			fmt.Printf("Error generating contribution heatmap for %d: %v\n", year, err)
+			hadErrors = true
 		}
 	}
 
@@ -1621,8 +1631,15 @@ func main() {
 	for _, base := range []string{"combined_stats", "top_languages", "contributions"} {
 		src := filepath.Join(outputDir, fmt.Sprintf("%s_%d.svg", base, currentYear))
 		dst := filepath.Join(outputDir, base+"_final.svg")
-		if data, err := os.ReadFile(src); err == nil {
-			os.WriteFile(dst, data, 0644)
+
+		data, err := os.ReadFile(src)
+		if err != nil {
+			fmt.Printf("Warning: could not read %s for backward-compatibility copy: %v\n", src, err)
+			continue
+		}
+		if err := os.WriteFile(dst, data, 0644); err != nil {
+			fmt.Printf("Error writing backward-compatibility file %s: %v\n", dst, err)
+			hadErrors = true
 		}
 	}
 
@@ -1637,5 +1654,9 @@ func main() {
 		}
 	}
 
+	if hadErrors {
+		fmt.Println("SVG generation completed with errors.")
+		os.Exit(1)
+	}
 	fmt.Println("All SVGs generated successfully!")
 }

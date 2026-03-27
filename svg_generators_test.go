@@ -48,7 +48,7 @@ func TestRenderCombinedStatsSVG(t *testing.T) {
 		stats := []NamedPlatformStats{
 			{PlatformGitHub, &PlatformStats{TotalCommits: 100, TotalPRsOrMRs: 10, TotalIssuesOrWIs: 5}},
 		}
-		tabs := renderYearTabs(2026, []int{2025, 2026}, "combined_stats")
+		tabs := renderYearTabs(2026, []int{2025, 2026})
 
 		// when
 		result := renderCombinedStatsSVG(stats, tabs)
@@ -332,7 +332,7 @@ func TestRenderContributionHeatmap(t *testing.T) {
 		contributions := map[string]map[PlatformName]int{
 			"2026-03-25": {PlatformGitHub: 5},
 		}
-		tabs := renderYearTabs(2026, []int{2025, 2026}, "contributions")
+		tabs := renderYearTabs(2026, []int{2025, 2026})
 
 		// when
 		result := renderContributionHeatmap(contributions, startDate, endDate, tabs)
@@ -352,7 +352,7 @@ func TestRenderYearTabs(t *testing.T) {
 		years := []int{2025, 2026}
 
 		// when
-		result := renderYearTabs(2026, years, "combined_stats")
+		result := renderYearTabs(2026, years)
 
 		// then
 		assert.Contains(t, result, `class="year-tab active"`)
@@ -365,7 +365,7 @@ func TestRenderYearTabs(t *testing.T) {
 		years := []int{2026}
 
 		// when
-		result := renderYearTabs(2026, years, "contributions")
+		result := renderYearTabs(2026, years)
 
 		// then
 		assert.Contains(t, result, "2026")

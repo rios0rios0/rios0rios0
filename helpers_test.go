@@ -153,7 +153,7 @@ func TestLoadStatsHistory(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "history.json")
 		content := `{"version":1,"snapshots":[{"date":"2026-03-27","platforms":{"GitHub":{"total_commits":100,"total_prs_or_mrs":10,"total_issues_or_wis":5,"languages":{"Go":50000},"daily_contributions":{"2026-03-27":5}}}}]}`
-		os.WriteFile(path, []byte(content), 0644)
+		require.NoError(t, os.WriteFile(path, []byte(content), 0644))
 
 		// when
 		result, err := loadStatsHistory(path)
