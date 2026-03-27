@@ -1725,7 +1725,15 @@ func main() {
 		// Languages
 		langsByPlatform := aggregateLanguagesByPlatform(stats)
 		if err := GenerateLanguagesBarChart(langsByPlatform, filepath.Join(outputDir, "top_languages"+suffix)); err != nil {
-			fmt.Printf("Warning: skipping languages chart for %d: %v\n", year, err)
+			errMsg := err.Error()
+			if strings.Contains(errMsg, "no language data") || strings.Contains(errMsg, "all language byte counts are zero") {
+				// Expected "no data" condition: warn and continue without marking a hard error.
+				fmt.Printf("Warning: skipping languages chart for %d: %v\n", year, err)
+			} else {
+				// Unexpected failure (e.g., file I/O, template, logic): treat as an error.
+				fmt.Printf("Error generating languages chart for %d: %v\n", year, err)
+				hadErrors = true
+			}
 		}
 
 		// Contribution heatmap
