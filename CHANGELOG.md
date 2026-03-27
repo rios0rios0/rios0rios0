@@ -16,15 +16,20 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-27
+
 ### Added
 
-- added unit tests for SVG generators with XML validation (22 test cases)
-- added unit tests for helper functions (`formatNumber`, `mergeContributions`, `mergeLanguages`)
 - added `Makefile` with `test` and `generate` targets
+- added unit tests for helper functions (`formatNumber`, `mergeContributions`, `mergeLanguages`)
+- added unit tests for SVG generators with XML validation (22 test cases)
 
 ### Changed
 
 - refactored SVG generators to separate rendering logic from file I/O for testability
+
+### Fixed
+
 - fixed Azure DevOps connection data API version to use `7.0-preview`
 
 ## [0.1.0] - 2026-03-12
