@@ -7,13 +7,16 @@
 ---
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_final.svg" height="190" alt="combined stats graph" />
-  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/claude_tokens_final.svg" height="190" alt="claude code tokens graph" />
+  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_final.svg" height="325" alt="combined stats" />
+  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/top_languages_final.svg" height="325" alt="top languages" />
 </div>
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/top_languages_final.svg" height="325" alt="top languages graph" />
-  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/contributions_final.svg" height="190" alt="contribution heatmap" />
+  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/claude_tokens_final.svg" alt="claude code tokens heatmap" />
+</div>
+
+<div align="center">
+  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/contributions_final.svg" alt="contribution heatmap" />
 </div>
 
 <details>

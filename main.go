@@ -70,6 +70,55 @@ func (p PlatformName) ColorScale() [4]string {
 	}
 }
 
+// Platform combination bitmask for heatmap color blending
+type PlatformCombo uint8
+
+const (
+	comboGitHub      PlatformCombo = 1 << 0
+	comboGitLab      PlatformCombo = 1 << 1
+	comboAzureDevOps PlatformCombo = 1 << 2
+)
+
+func platformToCombo(p PlatformName) PlatformCombo {
+	switch p {
+	case PlatformGitHub:
+		return comboGitHub
+	case PlatformGitLab:
+		return comboGitLab
+	case PlatformAzureDevOps:
+		return comboAzureDevOps
+	default:
+		return 0
+	}
+}
+
+var comboColorScales = map[PlatformCombo][4]string{
+	comboGitHub:                        {"#2a2f35", "#5a6068", "#6f777f", "#8b949e"},
+	comboGitLab:                        {"#4d1a10", "#b03820", "#d63e2a", "#e24329"},
+	comboAzureDevOps:                   {"#0a2d4d", "#0053a0", "#0066c0", "#0078d4"},
+	comboGitHub | comboGitLab:          {"#2d1a2e", "#7a3068", "#a0407a", "#c44a8c"},
+	comboGitHub | comboAzureDevOps:     {"#0a2d2d", "#1a6060", "#2a8080", "#3aadad"},
+	comboGitLab | comboAzureDevOps:     {"#2a1050", "#5a2090", "#7030b0", "#8840d0"},
+	comboGitHub | comboGitLab | comboAzureDevOps: {"#3d3010", "#8a7020", "#bda030", "#e8c840"},
+}
+
+var comboLabels = map[PlatformCombo]string{
+	comboGitHub:                        "GitHub",
+	comboGitLab:                        "GitLab",
+	comboAzureDevOps:                   "Azure DevOps",
+	comboGitHub | comboGitLab:          "GitHub + GitLab",
+	comboGitHub | comboAzureDevOps:     "GitHub + Azure DevOps",
+	comboGitLab | comboAzureDevOps:     "GitLab + Azure DevOps",
+	comboGitHub | comboGitLab | comboAzureDevOps: "All Platforms",
+}
+
+func comboColorScale(combo PlatformCombo) [4]string {
+	if scale, ok := comboColorScales[combo]; ok {
+		return scale
+	}
+	return [4]string{"#2a2f35", "#5a6068", "#6f777f", "#8b949e"}
+}
+
 // NamedPlatformStats pairs a PlatformStats with its platform identity
 type NamedPlatformStats struct {
 	Platform PlatformName
@@ -883,9 +932,9 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats, yearTabs string)
 		{"Contributed to (last year)", iconContribs, contribVals, totalContribs},
 	}
 
-	barAreaX := 210
-	barAreaW := 120
-	valueX := 355
+	barAreaX := 260
+	barAreaW := 150
+	valueX := 465
 
 	var body string
 	for i, row := range rows {
@@ -953,7 +1002,7 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats, yearTabs string)
 	bodyY := 55 + yearTabsHeight
 	legendY := 170 + yearTabsHeight
 
-	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="%d" viewBox="0 0 400 %d" fill="none" role="img">
+	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="495" height="%d" viewBox="0 0 495 %d" fill="none" role="img">
 <title>Combined Stats</title>
 <style>
 	.header { font: 600 14px 'Segoe UI', Ubuntu, Sans-Serif; fill: #fff; animation: fadeInAnimation 0.8s ease-in-out forwards; }
@@ -966,7 +1015,7 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats, yearTabs string)
 	.stagger { opacity: 0; animation: fadeInAnimation 0.3s ease-in-out forwards; }
 	@keyframes fadeInAnimation { from { opacity: 0; } to { opacity: 1; } }
 </style>
-<rect data-testid="card-bg" x="0.5" y="0.5" rx="4.5" height="99%%" width="399" fill="#151515" stroke="#e4e2e2" stroke-opacity="0.2"/>
+<rect data-testid="card-bg" x="0.5" y="0.5" rx="4.5" height="99%%" width="494" fill="#151515" stroke="#e4e2e2" stroke-opacity="0.2"/>
 %s
 <g data-testid="card-title" transform="translate(25, %d)">
 	<text x="0" y="0" class="header" data-testid="header">Stats (across all platforms)</text>
@@ -983,121 +1032,154 @@ func GenerateCombinedStatsSVG(platformStats []NamedPlatformStats, yearTabs, outp
 	return os.WriteFile(outputPath, []byte(svgContent), 0644)
 }
 
-func renderTokensLineGraph(tokens []TokenUsage) (string, error) {
+func renderTokensHeatmap(tokens []TokenUsage) (string, error) {
 	if len(tokens) == 0 {
 		return "", fmt.Errorf("no token data")
 	}
 
-	width := 800
-	height := 200
-	padLeft := 70
-	padRight := 20
-	padTop := 35
-	padBottom := 40
-	graphW := width - padLeft - padRight
-	graphH := height - padTop - padBottom
+	// Build date->tokens map
+	tokenMap := make(map[string]int)
+	for _, t := range tokens {
+		tokenMap[t.Date] = t.Tokens
+	}
+
+	// Find date range
+	minDate, _ := time.Parse("2006-01-02", tokens[0].Date)
+	maxDate, _ := time.Parse("2006-01-02", tokens[len(tokens)-1].Date)
+	for _, t := range tokens {
+		d, err := time.Parse("2006-01-02", t.Date)
+		if err != nil {
+			continue
+		}
+		if d.Before(minDate) {
+			minDate = d
+		}
+		if d.After(maxDate) {
+			maxDate = d
+		}
+	}
+
+	// Align start to Sunday
+	startDate := minDate
+	for startDate.Weekday() != time.Sunday {
+		startDate = startDate.AddDate(0, 0, -1)
+	}
+	endDate := maxDate
 
 	// Find max tokens for scaling
-	maxTokens := 0
+	maxTokens := 1
 	for _, t := range tokens {
 		if t.Tokens > maxTokens {
 			maxTokens = t.Tokens
 		}
 	}
-	if maxTokens == 0 {
-		maxTokens = 1
+
+	purpleScale := [4]string{"#1a1030", "#3d2070", "#6840a0", "#8884d8"}
+	getColor := func(count int) string {
+		if count == 0 {
+			return "#161b22"
+		}
+		ratio := float64(count) / float64(maxTokens)
+		switch {
+		case ratio <= 0.25:
+			return purpleScale[0]
+		case ratio <= 0.50:
+			return purpleScale[1]
+		case ratio <= 0.75:
+			return purpleScale[2]
+		default:
+			return purpleScale[3]
+		}
 	}
 
-	// Build path
-	var pathParts []string
-	var areaParts []string
-	n := len(tokens)
+	cellSize := 13
+	cellGap := 3
+	padLeft := 35
+	padTop := 35
+	padBottom := 40
+	legendHeight := 20
 
-	for i, t := range tokens {
-		var x int
-		if n < 2 {
-			x = padLeft
+	totalDays := int(endDate.Sub(startDate).Hours()/24) + 1
+	weeks := (totalDays + 6) / 7
+	if weeks < 1 {
+		weeks = 1
+	}
+	width := padLeft + weeks*(cellSize+cellGap) + 10
+	height := padTop + 7*(cellSize+cellGap) + padBottom + legendHeight
+
+	var cells string
+	dayLabels := []string{"", "Mon", "", "Wed", "", "Fri", ""}
+	for i, label := range dayLabels {
+		if label != "" {
+			y := padTop + i*(cellSize+cellGap) + cellSize - 2
+			cells += fmt.Sprintf(`<text x="2" y="%d" class="day-label">%s</text>`, y, label)
+		}
+	}
+
+	// Month labels
+	currentDate := startDate
+	lastMonth := -1
+	monthNames := []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}
+	for w := 0; w < weeks; w++ {
+		d := currentDate.AddDate(0, 0, w*7)
+		month := int(d.Month()) - 1
+		if month != lastMonth {
+			x := padLeft + w*(cellSize+cellGap)
+			cells += fmt.Sprintf(`<text x="%d" y="%d" class="month-label">%s</text>`, x, padTop-8, monthNames[month])
+			lastMonth = month
+		}
+	}
+
+	// Cells
+	for w := 0; w < weeks; w++ {
+		for d := 0; d < 7; d++ {
+			date := startDate.AddDate(0, 0, w*7+d)
+			if date.After(endDate) {
+				continue
+			}
+			dateStr := date.Format("2006-01-02")
+			count := tokenMap[dateStr]
+			x := padLeft + w*(cellSize+cellGap)
+			y := padTop + d*(cellSize+cellGap)
+			color := getColor(count)
+			tooltip := fmt.Sprintf("%s: %s tokens", dateStr, formatNumber(count))
+			cells += fmt.Sprintf(`<rect x="%d" y="%d" width="%d" height="%d" rx="2" fill="%s"><title>%s</title></rect>`,
+				x, y, cellSize, cellSize, color, tooltip)
+		}
+	}
+
+	// Intensity legend
+	legendY := padTop + 7*(cellSize+cellGap) + 12
+	legendLabels := []string{"Less", "", "", "", "More"}
+	legendColors := []string{"#161b22", purpleScale[0], purpleScale[1], purpleScale[2], purpleScale[3]}
+	dx := padLeft
+	for i, color := range legendColors {
+		cells += fmt.Sprintf(`<rect x="%d" y="%d" width="10" height="10" rx="2" fill="%s"/>`, dx, legendY, color)
+		if legendLabels[i] != "" {
+			cells += fmt.Sprintf(`<text x="%d" y="%d" class="legend-label">%s</text>`, dx+14, legendY+9, legendLabels[i])
+			dx += 14 + len(legendLabels[i])*6 + 8
 		} else {
-			x = padLeft + int(float64(i)/float64(n-1)*float64(graphW))
+			dx += 14
 		}
-		y := padTop + graphH - int(float64(t.Tokens)/float64(maxTokens)*float64(graphH))
-		if i == 0 {
-			pathParts = append(pathParts, fmt.Sprintf("M%d,%d", x, y))
-			areaParts = append(areaParts, fmt.Sprintf("M%d,%d", x, padTop+graphH))
-			areaParts = append(areaParts, fmt.Sprintf("L%d,%d", x, y))
-		} else {
-			pathParts = append(pathParts, fmt.Sprintf("L%d,%d", x, y))
-			areaParts = append(areaParts, fmt.Sprintf("L%d,%d", x, y))
-		}
-	}
-
-	// Close area path
-	var lastX int
-	if n < 2 {
-		lastX = padLeft
-	} else {
-		lastX = padLeft + int(float64(n-1)/float64(n-1)*float64(graphW))
-	}
-	areaParts = append(areaParts, fmt.Sprintf("L%d,%d", lastX, padTop+graphH))
-	areaParts = append(areaParts, "Z")
-
-	linePath := strings.Join(pathParts, " ")
-	areaPath := strings.Join(areaParts, " ")
-
-	// Y-axis labels (5 ticks)
-	var yLabels string
-	for i := 0; i <= 4; i++ {
-		val := maxTokens * i / 4
-		y := padTop + graphH - int(float64(i)/4.0*float64(graphH))
-		label := formatNumber(val)
-		yLabels += fmt.Sprintf(`<text x="%d" y="%d" class="axis-label" text-anchor="end">%s</text>`, padLeft-8, y+4, label)
-		yLabels += fmt.Sprintf(`<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="#333" stroke-width="0.5"/>`, padLeft, y, padLeft+graphW, y)
-	}
-
-	// X-axis labels (show ~6 dates evenly spaced)
-	var xLabels string
-	labelCount := 6
-	if n < labelCount {
-		labelCount = n
-	}
-	for i := 0; i < labelCount; i++ {
-		var idx int
-		if labelCount < 2 {
-			idx = 0
-		} else {
-			idx = i * (n - 1) / (labelCount - 1)
-		}
-		var x int
-		if n < 2 {
-			x = padLeft
-		} else {
-			x = padLeft + int(float64(idx)/float64(n-1)*float64(graphW))
-		}
-		date := tokens[idx].Date
-		if len(date) >= 10 {
-			date = date[5:10] // MM-DD
-		}
-		xLabels += fmt.Sprintf(`<text x="%d" y="%d" class="axis-label" text-anchor="middle">%s</text>`, x, padTop+graphH+20, date)
 	}
 
 	svg := fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">
 <style>
 	.title { font: 600 14px 'Segoe UI', Ubuntu, Sans-Serif; fill: #fff; }
-	.axis-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
+	.day-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
+	.month-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
+	.legend-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
 </style>
 <rect width="%d" height="%d" rx="4.5" fill="#151515" stroke="#e4e2e2" stroke-opacity="0.2"/>
-<text x="%d" y="22" class="title">Claude Code Tokens (by day)</text>
+<text x="20" y="22" class="title">Claude Code Tokens (by day)</text>
 %s
-%s
-<path d="%s" fill="rgba(136,132,216,0.15)" stroke="none"/>
-<path d="%s" fill="none" stroke="#8884d8" stroke-width="2"/>
-</svg>`, width, height, width, height, width, height, padLeft, yLabels, xLabels, areaPath, linePath)
+</svg>`, width, height, width, height, width, height, cells)
 
 	return svg, nil
 }
 
-func GenerateTokensLineGraph(tokens []TokenUsage, outputPath string) error {
-	svg, err := renderTokensLineGraph(tokens)
+func GenerateTokensHeatmap(tokens []TokenUsage, outputPath string) error {
+	svg, err := renderTokensHeatmap(tokens)
 	if err != nil {
 		return err
 	}
@@ -1135,11 +1217,11 @@ func renderLanguagesBarChart(languages map[string]map[PlatformName]int64, yearTa
 		return "", fmt.Errorf("all language byte counts are zero")
 	}
 
-	width := 400
+	width := 495
 	barHeight := 22
 	barGap := 6
 	padLeft := 110
-	padRight := 60
+	padRight := 70
 	yearTabsHeight := 0
 	if yearTabs != "" {
 		yearTabsHeight = 25
@@ -1252,8 +1334,8 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 		yearTabsHeight = 25
 	}
 	padTop := 35 + yearTabsHeight
-	padBottom := 40
-	legendHeight := 20
+	padBottom := 65
+	legendHeight := 40
 
 	// For a full calendar-year view (Jan 1 start), do not rewind to the previous
 	// Sunday as that would include days from the previous year.
@@ -1276,37 +1358,33 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 		}
 	}
 
-	// Determine dominant platform and color for a day
-	getColor := func(platforms map[PlatformName]int) string {
+	// Determine platform combo and color for a day
+	activeCombos := make(map[PlatformCombo]bool)
+	getColor := func(platforms map[PlatformName]int) (string, PlatformCombo) {
 		total := 0
-		for _, c := range platforms {
-			total += c
-		}
-		if total == 0 {
-			return "#161b22"
-		}
-
-		// Find dominant platform
-		dominant := PlatformGitHub
-		maxPlatform := 0
-		for _, p := range platformOrder {
-			if platforms[p] > maxPlatform {
-				maxPlatform = platforms[p]
-				dominant = p
+		var combo PlatformCombo
+		for p, c := range platforms {
+			if c > 0 {
+				total += c
+				combo |= platformToCombo(p)
 			}
 		}
+		if total == 0 {
+			return "#161b22", 0
+		}
+		activeCombos[combo] = true
 
-		scale := dominant.ColorScale()
+		scale := comboColorScale(combo)
 		ratio := float64(total) / float64(maxCount)
 		switch {
 		case ratio <= 0.25:
-			return scale[0]
+			return scale[0], combo
 		case ratio <= 0.50:
-			return scale[1]
+			return scale[1], combo
 		case ratio <= 0.75:
-			return scale[2]
+			return scale[2], combo
 		default:
-			return scale[3]
+			return scale[3], combo
 		}
 	}
 
@@ -1350,7 +1428,7 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 			platforms := contributions[dateStr]
 			x := padLeft + w*(cellSize+cellGap)
 			y := padTop + d*(cellSize+cellGap)
-			color := getColor(platforms)
+			color, _ := getColor(platforms)
 
 			// Build tooltip with per-platform breakdown
 			total := 0
@@ -1373,14 +1451,31 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 		}
 	}
 
-	// Platform legend
+	// Platform combo legend (show only combos that appear in the data)
 	legendY := padTop + 7*(cellSize+cellGap) + 12
+	comboOrder := []PlatformCombo{
+		comboGitHub, comboGitLab, comboAzureDevOps,
+		comboGitHub | comboGitLab, comboGitHub | comboAzureDevOps, comboGitLab | comboAzureDevOps,
+		comboGitHub | comboGitLab | comboAzureDevOps,
+	}
 	dx := padLeft
-	for _, p := range platformOrder {
-		scale := p.ColorScale()
-		cells += fmt.Sprintf(`<rect x="%d" y="%d" width="10" height="10" rx="2" fill="%s"/>`, dx, legendY, scale[3])
-		cells += fmt.Sprintf(`<text x="%d" y="%d" class="legend-label">%s</text>`, dx+14, legendY+9, string(p))
-		dx += 14 + len(string(p))*7 + 12
+	row := 0
+	maxDx := width - 20
+	for _, combo := range comboOrder {
+		if !activeCombos[combo] {
+			continue
+		}
+		label := comboLabels[combo]
+		scale := comboColorScale(combo)
+		entryWidth := 14 + len(label)*6 + 12
+		if dx+entryWidth > maxDx && dx > padLeft {
+			row++
+			dx = padLeft
+		}
+		y := legendY + row*16
+		cells += fmt.Sprintf(`<rect x="%d" y="%d" width="10" height="10" rx="2" fill="%s"/>`, dx, y, scale[3])
+		cells += fmt.Sprintf(`<text x="%d" y="%d" class="legend-label">%s</text>`, dx+14, y+9, label)
+		dx += entryWidth
 	}
 
 	yearTabsBlock := ""
@@ -1476,12 +1571,13 @@ func renderYearTabs(currentYear int, allYears []int) string {
 	for _, year := range allYears {
 		label := strconv.Itoa(year)
 		if year == currentYear {
-			tabs += fmt.Sprintf(`<rect x="%d" y="2" width="40" height="18" rx="3" fill="#30363d"/>`, dx)
-			tabs += fmt.Sprintf(`<text x="%d" y="15" text-anchor="middle" class="year-tab active">%s</text>`, dx+20, label)
+			tabs += fmt.Sprintf(`<rect x="%d" y="2" width="44" height="18" rx="3" fill="#30363d" stroke="#484f58" stroke-width="1"/>`, dx)
+			tabs += fmt.Sprintf(`<text x="%d" y="15" text-anchor="middle" class="year-tab active">%s</text>`, dx+22, label)
 		} else {
-			tabs += fmt.Sprintf(`<text x="%d" y="15" text-anchor="middle" class="year-tab">%s</text>`, dx+20, label)
+			tabs += fmt.Sprintf(`<rect x="%d" y="2" width="44" height="18" rx="3" fill="#1c2128" stroke="#30363d" stroke-opacity="0.5" stroke-width="1"/>`, dx)
+			tabs += fmt.Sprintf(`<text x="%d" y="15" text-anchor="middle" class="year-tab">%s</text>`, dx+22, label)
 		}
-		dx += 48
+		dx += 52
 	}
 	return tabs
 }
@@ -1649,7 +1745,7 @@ func main() {
 		fmt.Printf("Warning: could not load Claude Code token data: %v (skipping tokens graph)\n", err)
 	} else {
 		fmt.Println("Generating Claude Code tokens graph...")
-		if err = GenerateTokensLineGraph(tokenData, filepath.Join(outputDir, "claude_tokens_final.svg")); err != nil {
+		if err = GenerateTokensHeatmap(tokenData, filepath.Join(outputDir, "claude_tokens_final.svg")); err != nil {
 			fmt.Printf("Error generating tokens graph: %v\n", err)
 		}
 	}

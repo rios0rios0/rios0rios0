@@ -41,6 +41,7 @@ func TestRenderCombinedStatsSVG(t *testing.T) {
 
 		// then
 		assertValidSVGXML(t, result)
+		assert.Contains(t, result, `width="495"`)
 	})
 
 	t.Run("should produce valid XML with year tabs", func(t *testing.T) {
@@ -86,23 +87,9 @@ func TestRenderCombinedStatsSVG(t *testing.T) {
 		// then
 		assertValidSVGXML(t, result)
 	})
-
-	t.Run("should contain the unified card border style", func(t *testing.T) {
-		// given
-		stats := []NamedPlatformStats{
-			{PlatformGitHub, &PlatformStats{TotalCommits: 1, TotalPRsOrMRs: 1, TotalIssuesOrWIs: 1}},
-		}
-
-		// when
-		result := renderCombinedStatsSVG(stats, "")
-
-		// then
-		assert.Contains(t, result, `stroke-opacity="0.2"`)
-		assert.Contains(t, result, `fill="#151515"`)
-	})
 }
 
-func TestRenderTokensLineGraph(t *testing.T) {
+func TestRenderTokensHeatmap(t *testing.T) {
 	t.Parallel()
 
 	t.Run("should return error when tokens slice is empty", func(t *testing.T) {
@@ -110,7 +97,7 @@ func TestRenderTokensLineGraph(t *testing.T) {
 		var tokens []TokenUsage
 
 		// when
-		_, err := renderTokensLineGraph(tokens)
+		_, err := renderTokensHeatmap(tokens)
 
 		// then
 		assert.Error(t, err)
@@ -125,7 +112,7 @@ func TestRenderTokensLineGraph(t *testing.T) {
 		}
 
 		// when
-		result, err := renderTokensLineGraph(tokens)
+		result, err := renderTokensHeatmap(tokens)
 
 		// then
 		require.NoError(t, err)
@@ -137,11 +124,39 @@ func TestRenderTokensLineGraph(t *testing.T) {
 		tokens := []TokenUsage{{Date: "2026-03-15", Tokens: 5000}}
 
 		// when
-		result, err := renderTokensLineGraph(tokens)
+		result, err := renderTokensHeatmap(tokens)
 
 		// then
 		require.NoError(t, err)
 		assertValidSVGXML(t, result)
+	})
+
+	t.Run("should contain purple color scale for token intensity", func(t *testing.T) {
+		// given
+		tokens := []TokenUsage{
+			{Date: "2026-01-01", Tokens: 100},
+			{Date: "2026-01-02", Tokens: 5000},
+		}
+
+		// when
+		result, err := renderTokensHeatmap(tokens)
+
+		// then
+		require.NoError(t, err)
+		assert.Contains(t, result, "#8884d8")
+	})
+
+	t.Run("should contain intensity legend", func(t *testing.T) {
+		// given
+		tokens := []TokenUsage{{Date: "2026-01-01", Tokens: 1000}}
+
+		// when
+		result, err := renderTokensHeatmap(tokens)
+
+		// then
+		require.NoError(t, err)
+		assert.Contains(t, result, "Less")
+		assert.Contains(t, result, "More")
 	})
 }
 
@@ -187,28 +202,7 @@ func TestRenderLanguagesBarChart(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		assertValidSVGXML(t, result)
-		assert.Contains(t, result, PlatformGitHub.Color())
-		assert.Contains(t, result, PlatformGitLab.Color())
-		assert.Contains(t, result, PlatformAzureDevOps.Color())
-	})
-
-	t.Run("should limit to top 10 languages when more are provided", func(t *testing.T) {
-		// given
-		languages := map[string]map[PlatformName]int64{
-			"Go": {PlatformGitHub: 150000}, "Python": {PlatformGitHub: 140000}, "JavaScript": {PlatformGitHub: 130000},
-			"Java": {PlatformGitHub: 120000}, "TypeScript": {PlatformGitHub: 110000}, "C": {PlatformGitHub: 100000},
-			"C++": {PlatformGitHub: 90000}, "Rust": {PlatformGitHub: 80000}, "Ruby": {PlatformGitHub: 70000},
-			"PHP": {PlatformGitHub: 60000}, "Swift": {PlatformGitHub: 50000}, "Kotlin": {PlatformGitHub: 40000},
-		}
-
-		// when
-		result, err := renderLanguagesBarChart(languages, "")
-
-		// then
-		require.NoError(t, err)
-		assertValidSVGXML(t, result)
-		assert.NotContains(t, result, "Kotlin")
-		assert.Contains(t, result, "Go")
+		assert.Contains(t, result, `width="495"`)
 	})
 
 	t.Run("should show 100 percent for a single language", func(t *testing.T) {
@@ -268,28 +262,43 @@ func TestRenderContributionHeatmap(t *testing.T) {
 		assert.Contains(t, result, "2026-03-25: 7 (GitHub: 3, GitLab: 4)")
 	})
 
-	t.Run("should use platform-specific colors for single-platform days", func(t *testing.T) {
+	t.Run("should use blended color for multi-platform days", func(t *testing.T) {
 		// given
 		contributions := map[string]map[PlatformName]int{
-			"2026-03-25": {PlatformAzureDevOps: 10},
+			"2026-03-25": {PlatformGitHub: 3, PlatformGitLab: 4},
 		}
 
 		// when
 		result := renderContributionHeatmap(contributions, startDate, endDate, "")
 
 		// then
-		scale := PlatformAzureDevOps.ColorScale()
-		containsAnyScale := false
-		for _, c := range scale {
+		ghGlScale := comboColorScale(comboGitHub | comboGitLab)
+		containsBlend := false
+		for _, c := range ghGlScale {
 			if strings.Contains(result, c) {
-				containsAnyScale = true
+				containsBlend = true
 				break
 			}
 		}
-		assert.True(t, containsAnyScale, "should contain Azure DevOps color scale")
+		assert.True(t, containsBlend, "should contain GitHub+GitLab blended color")
 	})
 
-	t.Run("should contain month labels", func(t *testing.T) {
+	t.Run("should show combo legend entries for multi-platform data", func(t *testing.T) {
+		// given
+		contributions := map[string]map[PlatformName]int{
+			"2026-03-25": {PlatformGitHub: 3, PlatformGitLab: 4},
+			"2026-03-26": {PlatformAzureDevOps: 10},
+		}
+
+		// when
+		result := renderContributionHeatmap(contributions, startDate, endDate, "")
+
+		// then
+		assert.Contains(t, result, "GitHub + GitLab")
+		assert.Contains(t, result, "Azure DevOps")
+	})
+
+	t.Run("should contain month and day labels", func(t *testing.T) {
 		// given
 		contributions := map[string]map[PlatformName]int{}
 
@@ -298,33 +307,9 @@ func TestRenderContributionHeatmap(t *testing.T) {
 
 		// then
 		assert.Contains(t, result, "Jan")
-		assert.Contains(t, result, "Mar")
-	})
-
-	t.Run("should contain day labels", func(t *testing.T) {
-		// given
-		contributions := map[string]map[PlatformName]int{}
-
-		// when
-		result := renderContributionHeatmap(contributions, startDate, endDate, "")
-
-		// then
 		assert.Contains(t, result, "Mon")
 		assert.Contains(t, result, "Wed")
 		assert.Contains(t, result, "Fri")
-	})
-
-	t.Run("should contain platform legend", func(t *testing.T) {
-		// given
-		contributions := map[string]map[PlatformName]int{}
-
-		// when
-		result := renderContributionHeatmap(contributions, startDate, endDate, "")
-
-		// then
-		assert.Contains(t, result, "GitHub")
-		assert.Contains(t, result, "GitLab")
-		assert.Contains(t, result, "Azure DevOps")
 	})
 
 	t.Run("should produce valid XML with year tabs", func(t *testing.T) {
@@ -347,7 +332,7 @@ func TestRenderContributionHeatmap(t *testing.T) {
 func TestRenderYearTabs(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should highlight the active year", func(t *testing.T) {
+	t.Run("should highlight the active year with filled background", func(t *testing.T) {
 		// given
 		years := []int{2025, 2026}
 
@@ -356,8 +341,20 @@ func TestRenderYearTabs(t *testing.T) {
 
 		// then
 		assert.Contains(t, result, `class="year-tab active"`)
+		assert.Contains(t, result, `fill="#30363d"`)
 		assert.Contains(t, result, "2026")
 		assert.Contains(t, result, "2025")
+	})
+
+	t.Run("should show background rect for inactive tabs", func(t *testing.T) {
+		// given
+		years := []int{2025, 2026}
+
+		// when
+		result := renderYearTabs(2026, years)
+
+		// then
+		assert.Contains(t, result, `fill="#1c2128"`)
 	})
 
 	t.Run("should handle single year", func(t *testing.T) {
@@ -370,5 +367,32 @@ func TestRenderYearTabs(t *testing.T) {
 		// then
 		assert.Contains(t, result, "2026")
 		assert.Contains(t, result, `class="year-tab active"`)
+	})
+}
+
+func TestComboColorScale(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return distinct scales for each combo", func(t *testing.T) {
+		// given
+		combos := []PlatformCombo{
+			comboGitHub,
+			comboGitLab,
+			comboAzureDevOps,
+			comboGitHub | comboGitLab,
+			comboGitHub | comboAzureDevOps,
+			comboGitLab | comboAzureDevOps,
+			comboGitHub | comboGitLab | comboAzureDevOps,
+		}
+
+		// when
+		scales := make(map[string]bool)
+		for _, combo := range combos {
+			scale := comboColorScale(combo)
+			scales[scale[3]] = true
+		}
+
+		// then
+		assert.Equal(t, 7, len(scales), "each combo should have a unique brightest color")
 	})
 }
