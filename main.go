@@ -203,7 +203,6 @@ func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 		maxRepos      int
 		contributions map[string]int // date -> max count
 		languages     map[string]int64
-		latestDate    string
 	}
 
 	yearPlatform := make(map[int]map[PlatformName]*accumEntry)
@@ -237,9 +236,10 @@ func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 				if ps.TotalRepos > entry.maxRepos {
 					entry.maxRepos = ps.TotalRepos
 				}
-				if snap.Date > entry.latestDate {
-					entry.latestDate = snap.Date
-					entry.languages = ps.Languages
+				for lang, bytes := range ps.Languages {
+					if bytes > entry.languages[lang] {
+						entry.languages[lang] = bytes
+					}
 				}
 			}
 
@@ -364,18 +364,19 @@ func FetchGitHubStats(username, token string) (*PlatformStats, error) {
 		}
 	}
 
-	// Fetch languages from repos
-	if err = fetchGitHubLanguages(client, username, token, stats); err != nil {
+	// Fetch languages only from repos pushed in the last year
+	oneYearAgo := time.Now().AddDate(-1, 0, 0)
+	if err = fetchGitHubLanguages(client, username, token, oneYearAgo, stats); err != nil {
 		fmt.Printf("Warning: could not fetch GitHub languages: %v\n", err)
 	}
 
 	return stats, nil
 }
 
-func fetchGitHubLanguages(client *http.Client, username, token string, stats *PlatformStats) error {
+func fetchGitHubLanguages(client *http.Client, username, token string, since time.Time, stats *PlatformStats) error {
 	page := 1
 	for {
-		reposURL := fmt.Sprintf("https://api.github.com/users/%s/repos?per_page=100&page=%d&type=owner", username, page)
+		reposURL := fmt.Sprintf("https://api.github.com/users/%s/repos?per_page=100&page=%d&type=owner&sort=pushed&direction=desc", username, page)
 		req, err := http.NewRequest("GET", reposURL, nil)
 		if err != nil {
 			return err
@@ -397,6 +398,7 @@ func fetchGitHubLanguages(client *http.Client, username, token string, stats *Pl
 			Name     string `json:"name"`
 			Fork     bool   `json:"fork"`
 			Language string `json:"language"`
+			PushedAt string `json:"pushed_at"`
 		}
 		if err = json.Unmarshal(body, &repos); err != nil {
 			return err
@@ -406,11 +408,19 @@ func fetchGitHubLanguages(client *http.Client, username, token string, stats *Pl
 			break
 		}
 
+		allTooOld := true
 		for _, repo := range repos {
 			if repo.Fork {
 				continue
 			}
 			stats.TotalRepos++
+
+			// Skip repos not pushed since the cutoff date
+			pushedAt, err := time.Parse(time.RFC3339, repo.PushedAt)
+			if err != nil || pushedAt.Before(since) {
+				continue
+			}
+			allTooOld = false
 			langURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/languages", username, repo.Name)
 			langReq, err := http.NewRequest("GET", langURL, nil)
 			if err != nil {
@@ -437,6 +447,10 @@ func fetchGitHubLanguages(client *http.Client, username, token string, stats *Pl
 			}
 		}
 
+		// Repos are sorted by pushed desc; if all on this page are too old, stop
+		if allTooOld {
+			break
+		}
 		if len(repos) < 100 {
 			break
 		}
@@ -565,18 +579,18 @@ func FetchGitLabStats(username, accessToken string) (*PlatformStats, error) {
 		page++
 	}
 
-	// Fetch languages from user's projects
-	if err = fetchGitLabLanguages(client, userID, accessToken, stats); err != nil {
+	// Fetch languages only from projects with recent activity
+	if err = fetchGitLabLanguages(client, userID, accessToken, oneYearAgo, stats); err != nil {
 		fmt.Printf("Warning: could not fetch GitLab languages: %v\n", err)
 	}
 
 	return stats, nil
 }
 
-func fetchGitLabLanguages(client *http.Client, userID int, accessToken string, stats *PlatformStats) error {
+func fetchGitLabLanguages(client *http.Client, userID int, accessToken string, since time.Time, stats *PlatformStats) error {
 	page := 1
 	for {
-		projectsURL := fmt.Sprintf("https://gitlab.com/api/v4/users/%d/projects?per_page=100&page=%d&owned=true", userID, page)
+		projectsURL := fmt.Sprintf("https://gitlab.com/api/v4/users/%d/projects?per_page=100&page=%d&owned=true&order_by=last_activity_at&sort=desc", userID, page)
 		req, err := http.NewRequest("GET", projectsURL, nil)
 		if err != nil {
 			return err
@@ -595,7 +609,8 @@ func fetchGitLabLanguages(client *http.Client, userID int, accessToken string, s
 		}
 
 		var projects []struct {
-			ID int `json:"id"`
+			ID             int    `json:"id"`
+			LastActivityAt string `json:"last_activity_at"`
 		}
 		if err = json.Unmarshal(body, &projects); err != nil {
 			return err
@@ -604,8 +619,16 @@ func fetchGitLabLanguages(client *http.Client, userID int, accessToken string, s
 			break
 		}
 
+		allTooOld := true
 		for _, proj := range projects {
 			stats.TotalRepos++
+
+			// Skip projects not active since the cutoff date
+			lastActivity, err := time.Parse(time.RFC3339, proj.LastActivityAt)
+			if err != nil || lastActivity.Before(since) {
+				continue
+			}
+			allTooOld = false
 			langURL := fmt.Sprintf("https://gitlab.com/api/v4/projects/%d/languages", proj.ID)
 			langReq, err := http.NewRequest("GET", langURL, nil)
 			if err != nil {
@@ -633,6 +656,9 @@ func fetchGitLabLanguages(client *http.Client, userID int, accessToken string, s
 			}
 		}
 
+		if allTooOld {
+			break
+		}
 		if len(projects) < 100 {
 			break
 		}
@@ -642,6 +668,11 @@ func fetchGitLabLanguages(client *http.Client, userID int, accessToken string, s
 }
 
 // --- Azure DevOps ---
+
+type adoProject struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
 
 func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, error) {
 	stats := &PlatformStats{
@@ -707,11 +738,7 @@ func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, er
 	fromDate := oneYearAgo.Format("2006-01-02T15:04:05Z")
 
 	// Get all projects
-	type project struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-	}
-	var projects []project
+	var projects []adoProject
 
 	continuationToken := ""
 	for {
@@ -741,8 +768,8 @@ func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, er
 		}
 
 		var result struct {
-			Count int       `json:"count"`
-			Value []project `json:"value"`
+			Count int          `json:"count"`
+			Value []adoProject `json:"value"`
 		}
 		if err = json.Unmarshal(respBody, &result); err != nil {
 			return nil, err
@@ -873,6 +900,9 @@ func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, er
 		}
 	}
 
+	// Fetch languages from repos with recent commits
+	fetchAzureDevOpsLanguages(newRequest, doRequest, organization, projects, stats)
+
 	// Count work items
 	wiqlURL := fmt.Sprintf("https://dev.azure.com/%s/_apis/wit/wiql?$top=20000&api-version=7.0", url.PathEscape(organization))
 	wiqlQuery := fmt.Sprintf(
@@ -898,6 +928,96 @@ func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, er
 	}
 
 	return stats, nil
+}
+
+// extensionToLanguage maps common file extensions to language names
+var extensionToLanguage = map[string]string{
+	".go": "Go", ".java": "Java", ".py": "Python", ".js": "JavaScript",
+	".ts": "TypeScript", ".tsx": "TypeScript", ".jsx": "JavaScript",
+	".cs": "C#", ".cpp": "C++", ".c": "C", ".h": "C", ".hpp": "C++",
+	".rb": "Ruby", ".rs": "Rust", ".swift": "Swift", ".kt": "Kotlin",
+	".scala": "Scala", ".php": "PHP", ".dart": "Dart", ".lua": "Lua",
+	".sh": "Shell", ".bash": "Shell", ".zsh": "Shell", ".ps1": "PowerShell",
+	".yaml": "YAML", ".yml": "YAML", ".json": "JSON", ".xml": "XML",
+	".html": "HTML", ".css": "CSS", ".scss": "SCSS", ".less": "Less",
+	".sql": "SQL", ".tf": "HCL", ".hcl": "HCL",
+	".md": "Markdown", ".pas": "Pascal", ".pp": "Pascal", ".lpr": "Pascal",
+	".r": "R", ".m": "Objective-C", ".mm": "Objective-C",
+	".groovy": "Groovy", ".gradle": "Groovy", ".pl": "Perl",
+}
+
+func fetchAzureDevOpsLanguages(
+	newRequest func(string, string, io.Reader) (*http.Request, error),
+	doRequest func(*http.Request) ([]byte, int, error),
+	organization string,
+	projects []adoProject,
+	stats *PlatformStats,
+) {
+	for _, proj := range projects {
+		// Get repos for this project
+		reposURL := fmt.Sprintf("https://dev.azure.com/%s/%s/_apis/git/repositories?api-version=7.0",
+			url.PathEscape(organization), url.PathEscape(proj.ID))
+		req, err := newRequest("GET", reposURL, nil)
+		if err != nil {
+			continue
+		}
+
+		body, statusCode, err := doRequest(req)
+		if err != nil || statusCode != http.StatusOK {
+			continue
+		}
+
+		var reposResult struct {
+			Value []struct {
+				ID            string `json:"id"`
+				DefaultBranch string `json:"defaultBranch"`
+			} `json:"value"`
+		}
+		if err = json.Unmarshal(body, &reposResult); err != nil {
+			continue
+		}
+
+		for _, repo := range reposResult.Value {
+			if repo.DefaultBranch == "" {
+				continue
+			}
+
+			// Fetch the file tree from the default branch
+			itemsURL := fmt.Sprintf(
+				"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/items?recursionLevel=Full&api-version=7.0",
+				url.PathEscape(organization), url.PathEscape(proj.ID), url.PathEscape(repo.ID),
+			)
+			req, err := newRequest("GET", itemsURL, nil)
+			if err != nil {
+				continue
+			}
+
+			body, statusCode, err := doRequest(req)
+			if err != nil || statusCode != http.StatusOK {
+				continue
+			}
+
+			var itemsResult struct {
+				Value []struct {
+					Path   string `json:"path"`
+					IsFolder bool  `json:"isFolder"`
+				} `json:"value"`
+			}
+			if err = json.Unmarshal(body, &itemsResult); err != nil {
+				continue
+			}
+
+			for _, item := range itemsResult.Value {
+				if item.IsFolder {
+					continue
+				}
+				ext := strings.ToLower(filepath.Ext(item.Path))
+				if lang, ok := extensionToLanguage[ext]; ok {
+					stats.Languages[lang]++
+				}
+			}
+		}
+	}
 }
 
 // --- SVG Generators ---
@@ -968,12 +1088,6 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 			mergedContribs[date] += count
 		}
 	}
-	totalContribs := totalCommits + totalPRs + totalIssues
-	contribVals := make(map[PlatformName]int64)
-	for _, p := range platformOrder {
-		contribVals[p] = commitVals[p] + prVals[p] + issueVals[p]
-	}
-
 	// Estimate LoC only from platforms with real byte counts (GitHub, Azure DevOps).
 	// GitLab stores language percentages scaled by 100, not actual bytes.
 	const bytesPerLine = 40
@@ -998,7 +1112,6 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 	iconCommits := `<path fill-rule="evenodd" d="M1.643 3.143L.427 1.927A.25.25 0 000 2.104V5.75c0 .138.112.25.25.25h3.646a.25.25 0 00.177-.427L2.715 4.215a6.5 6.5 0 11-1.18 4.458.75.75 0 10-1.493.154 8.001 8.001 0 101.6-5.684zM7.75 4a.75.75 0 01.75.75v2.992l2.028.812a.75.75 0 01-.557 1.392l-2.5-1A.75.75 0 017 8.25v-3.5A.75.75 0 017.75 4z"/>`
 	iconPRs := `<path fill-rule="evenodd" d="M7.177 3.073L9.573.677A.25.25 0 0110 .854v4.792a.25.25 0 01-.427.177L7.177 3.427a.25.25 0 010-.354zM3.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122v5.256a2.251 2.251 0 11-1.5 0V5.372A2.25 2.25 0 011.5 3.25zM11 2.5h-1V4h1a1 1 0 011 1v5.628a2.251 2.251 0 101.5 0V5A2.5 2.5 0 0011 2.5zm1 10.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0zM3.75 12a.75.75 0 100 1.5.75.75 0 000-1.5z"/>`
 	iconIssues := `<path fill-rule="evenodd" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm9 3a1 1 0 11-2 0 1 1 0 012 0zm-.25-6.25a.75.75 0 00-1.5 0v3.5a.75.75 0 001.5 0v-3.5z"/>`
-	iconContribs := `<path fill-rule="evenodd" d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8zM5 12.25v3.25a.25.25 0 00.4.2l1.45-1.087a.25.25 0 01.3 0L8.6 15.7a.25.25 0 00.4-.2v-3.25a.25.25 0 00-.25-.25h-3.5a.25.25 0 00-.25.25z"/>`
 	iconRepos := `<path fill-rule="evenodd" d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-1 1v.17a2.5 2.5 0 01-.286-.958A2.495 2.495 0 012 11.5v-9zm10.5-1h-8a1 1 0 00-1 1v6.708A2.486 2.486 0 014.5 9h8V1.5z"/>`
 	iconCode := `<path fill-rule="evenodd" d="M4.72 3.22a.75.75 0 011.06 1.06L2.06 8l3.72 3.72a.75.75 0 11-1.06 1.06L.47 8.53a.75.75 0 010-1.06l4.25-4.25zm6.56 0a.75.75 0 10-1.06 1.06L13.94 8l-3.72 3.72a.75.75 0 101.06 1.06l4.25-4.25a.75.75 0 000-1.06l-4.25-4.25z"/>`
 	iconStreak := `<path fill-rule="evenodd" d="M7.998.002C5.026.002 2.975 2.1 2.31 3.548c-.333.723-.522 1.477-.522 2.087 0 1.236.755 2.26 1.756 2.943.39.267.833.49 1.272.658-.122.1-.242.21-.355.33A3.51 3.51 0 003.5 11.5a3.5 3.5 0 007 0c0-.96-.39-1.83-1.02-2.46a5.844 5.844 0 00-.397-.37c.466-.182.937-.425 1.346-.71C11.4 7.233 12.13 6.201 12.13 4.97c0-.61-.19-1.364-.522-2.087C10.942 1.434 8.888-.664 7.998.002zM7.5 12a2 2 0 01-2-2c0-.537.12-.976.373-1.393.247-.408.622-.786 1.127-1.107.505.32.88.699 1.127 1.107.254.417.373.856.373 1.393a2 2 0 01-2 2z"/>`
@@ -1007,7 +1120,6 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 		{"Total Commits", iconCommits, commitVals, totalCommits},
 		{"Total PRs / MRs", iconPRs, prVals, totalPRs},
 		{"Total Issues / Work Items", iconIssues, issueVals, totalIssues},
-		{"Contributed to (last year)", iconContribs, contribVals, totalContribs},
 		{"Total Repositories", iconRepos, repoVals, totalRepos},
 		{"Lines of Code", iconCode, locVals, linesOfCode},
 		{"Longest Streak (days)", iconStreak, streakVals, streak},
@@ -1131,12 +1243,17 @@ func renderTokensHeatmap(tokens []TokenUsage) (string, error) {
 		}
 	}
 
+	// Ensure at least a full year range for consistent sizing
+	startDate := time.Date(minDate.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
+	endDate := time.Date(minDate.Year(), 12, 31, 23, 59, 59, 0, time.UTC)
+	if maxDate.After(endDate) {
+		endDate = maxDate
+	}
+
 	// Align start to Sunday
-	startDate := minDate
 	for startDate.Weekday() != time.Sunday {
 		startDate = startDate.AddDate(0, 0, -1)
 	}
-	endDate := maxDate
 
 	// Find max tokens for scaling
 	maxTokens := 1
@@ -1644,46 +1761,65 @@ func main() {
 		history = &StatsHistory{Version: 1}
 	}
 
-	// 2. Fetch fresh platform data
-	var namedStats []NamedPlatformStats
+	// 2. Fetch fresh platform data (in parallel)
+	type fetchResult struct {
+		Platform PlatformName
+		Stats    *PlatformStats
+		Err      error
+	}
+
+	resultCh := make(chan fetchResult, 3)
+	fetchers := 0
 
 	ghUsername := os.Getenv("GITHUB_USERNAME")
 	ghToken := os.Getenv("GH_TOKEN")
 	if ghUsername != "" && ghToken != "" {
-		fmt.Println("Fetching GitHub stats...")
-		stats, err := FetchGitHubStats(ghUsername, ghToken)
-		if err != nil {
-			fmt.Printf("Warning: skipping GitHub — %v\n", err)
-		} else {
-			fmt.Printf("GitHub: %d commits, %d PRs, %d issues\n", stats.TotalCommits, stats.TotalPRsOrMRs, stats.TotalIssuesOrWIs)
-			namedStats = append(namedStats, NamedPlatformStats{PlatformGitHub, stats})
-		}
+		fetchers++
+		go func() {
+			fmt.Println("Fetching GitHub stats...")
+			stats, err := FetchGitHubStats(ghUsername, ghToken)
+			resultCh <- fetchResult{PlatformGitHub, stats, err}
+		}()
 	}
 
 	glUsername := os.Getenv("GITLAB_USERNAME")
 	glToken := os.Getenv("GITLAB_ACCESS_TOKEN")
 	if glUsername != "" && glToken != "" {
-		fmt.Println("Fetching GitLab stats...")
-		stats, err := FetchGitLabStats(glUsername, glToken)
-		if err != nil {
-			fmt.Printf("Warning: skipping GitLab — %v\n", err)
-		} else {
-			fmt.Printf("GitLab: %d commits, %d MRs, %d issues\n", stats.TotalCommits, stats.TotalPRsOrMRs, stats.TotalIssuesOrWIs)
-			namedStats = append(namedStats, NamedPlatformStats{PlatformGitLab, stats})
-		}
+		fetchers++
+		go func() {
+			fmt.Println("Fetching GitLab stats...")
+			stats, err := FetchGitLabStats(glUsername, glToken)
+			resultCh <- fetchResult{PlatformGitLab, stats, err}
+		}()
 	}
 
 	adoOrg := os.Getenv("AZURE_DEVOPS_ORG")
 	adoToken := os.Getenv("AZURE_DEVOPS_ACCESS_TOKEN")
 	if adoOrg != "" && adoToken != "" {
-		fmt.Println("Fetching Azure DevOps stats...")
-		stats, err := FetchAzureDevOpsStats(adoOrg, adoToken)
-		if err != nil {
-			fmt.Printf("Warning: skipping Azure DevOps — %v\n", err)
-		} else {
-			fmt.Printf("Azure DevOps: %d commits, %d PRs, %d work items\n", stats.TotalCommits, stats.TotalPRsOrMRs, stats.TotalIssuesOrWIs)
-			namedStats = append(namedStats, NamedPlatformStats{PlatformAzureDevOps, stats})
+		fetchers++
+		go func() {
+			fmt.Println("Fetching Azure DevOps stats...")
+			stats, err := FetchAzureDevOpsStats(adoOrg, adoToken)
+			resultCh <- fetchResult{PlatformAzureDevOps, stats, err}
+		}()
+	}
+
+	var namedStats []NamedPlatformStats
+	for i := 0; i < fetchers; i++ {
+		r := <-resultCh
+		if r.Err != nil {
+			fmt.Printf("Warning: skipping %s — %v\n", r.Platform, r.Err)
+			continue
 		}
+		switch r.Platform {
+		case PlatformGitHub:
+			fmt.Printf("GitHub: %d commits, %d PRs, %d issues\n", r.Stats.TotalCommits, r.Stats.TotalPRsOrMRs, r.Stats.TotalIssuesOrWIs)
+		case PlatformGitLab:
+			fmt.Printf("GitLab: %d commits, %d MRs, %d issues\n", r.Stats.TotalCommits, r.Stats.TotalPRsOrMRs, r.Stats.TotalIssuesOrWIs)
+		case PlatformAzureDevOps:
+			fmt.Printf("Azure DevOps: %d commits, %d PRs, %d work items\n", r.Stats.TotalCommits, r.Stats.TotalPRsOrMRs, r.Stats.TotalIssuesOrWIs)
+		}
+		namedStats = append(namedStats, NamedPlatformStats{r.Platform, r.Stats})
 	}
 
 	if len(namedStats) == 0 {
@@ -1739,13 +1875,8 @@ func main() {
 		// Contribution heatmap
 		contribsByPlatform := aggregateContributionsByPlatform(stats)
 		var startDate, endDate time.Time
-		if year == currentYear {
-			startDate = time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)
-			endDate = now.UTC()
-		} else {
-			startDate = time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)
-			endDate = time.Date(year, 12, 31, 23, 59, 59, 0, time.UTC)
-		}
+		startDate = time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)
+		endDate = time.Date(year, 12, 31, 23, 59, 59, 0, time.UTC)
 		if err := GenerateContributionHeatmap(contribsByPlatform, startDate, endDate, filepath.Join(outputDir, "contributions"+suffix)); err != nil {
 			fmt.Printf("Error generating contribution heatmap for %d: %v\n", year, err)
 			hadErrors = true

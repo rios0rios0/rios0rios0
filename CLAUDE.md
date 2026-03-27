@@ -46,15 +46,15 @@ Path configuration (defaults work for local development):
 
 Single-package monolith (`package main` in `main.go`). Key components:
 
-- **History system** (`StatsHistory`, `DailySnapshot`, `PlatformSnapshot`): JSON-based persistence. Each daily run saves a snapshot with per-platform stats. `accumulateByYear()` builds per-year views by scanning all snapshots and collecting contributions by year, taking max counts across snapshots.
+- **History system** (`StatsHistory`, `DailySnapshot`, `PlatformSnapshot`): JSON-based persistence. Each daily run saves a snapshot with per-platform stats. `accumulateByYear()` builds per-year views by scanning all snapshots, merging languages (max bytes per language across snapshots) and collecting contributions by year (max per date).
 - **Platform types** (`PlatformName`, `NamedPlatformStats`): Typed platform identity with color/color-scale methods. Order: GitHub, GitLab, Azure DevOps.
-- **Platform fetchers** (`FetchGitHubStats`, `FetchGitLabStats`, `FetchAzureDevOpsStats`): HTTP clients returning `*PlatformStats`. GitHub uses GraphQL for contributions. All fail gracefully (skip platform on error).
-- **SVG renderers**: Pure functions returning SVG strings. Accept `yearTabs string` parameter for year tab bar. Each has a `Generate*` wrapper for disk I/O.
-  - `renderCombinedStatsSVG([]NamedPlatformStats, yearTabs)` -- stats card with stacked bars
-  - `renderTokensLineGraph([]TokenUsage)` -- line graph (not year-scoped)
-  - `renderLanguagesBarChart(map[string]map[PlatformName]int64, yearTabs)` -- stacked bar chart
-  - `renderContributionHeatmap(contribs, startDate, endDate, yearTabs)` -- heatmap with date range
-- **`main()` flow**: Load history -> fetch platforms -> save snapshot -> accumulate by year -> generate per-year SVGs -> copy current year to `_final.svg` -> generate tokens graph
+- **Platform fetchers** (`FetchGitHubStats`, `FetchGitLabStats`, `FetchAzureDevOpsStats`): HTTP clients returning `*PlatformStats`. Run in parallel via goroutines. GitHub uses GraphQL for contributions. Language data is filtered to repos with activity in the last year (GitHub: `pushed_at`, GitLab: `last_activity_at`, Azure DevOps: file extension analysis from repo trees). All fail gracefully (skip platform on error).
+- **SVG renderers**: Pure functions returning SVG strings. Each has a `Generate*` wrapper for disk I/O.
+  - `renderCombinedStatsSVG([]NamedPlatformStats)` -- stats card with stacked bars
+  - `renderTokensHeatmap([]TokenUsage)` -- heatmap (full year width)
+  - `renderLanguagesBarChart(map[string]map[PlatformName]int64)` -- stacked bar chart
+  - `renderContributionHeatmap(contribs, startDate, endDate)` -- heatmap with full year range
+- **`main()` flow**: Load history -> fetch platforms (parallel) -> save snapshot -> accumulate by year -> generate per-year SVGs (full year range) -> copy current year to `_final.svg` -> generate tokens graph
 
 Platform colors: GitHub `#238636`, GitLab `#e24329`, Azure DevOps `#0078d4`. Unified card chrome: `rx="4.5"`, `fill="#151515"`, `stroke="#e4e2e2"`, `stroke-opacity="0.2"`.
 
