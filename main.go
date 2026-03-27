@@ -974,15 +974,23 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 		contribVals[p] = commitVals[p] + prVals[p] + issueVals[p]
 	}
 
-	linesOfCode := int(totalBytes / 40)
+	// Estimate LoC only from platforms with real byte counts (GitHub, Azure DevOps).
+	// GitLab stores language percentages scaled by 100, not actual bytes.
+	const bytesPerLine = 40
+	var realBytes int64
 	locVals := make(map[PlatformName]int64)
 	for _, ns := range platformStats {
+		if ns.Platform == PlatformGitLab {
+			continue
+		}
 		var platBytes int64
 		for _, bytes := range ns.Stats.Languages {
 			platBytes += bytes
 		}
-		locVals[ns.Platform] = platBytes / 40
+		realBytes += platBytes
+		locVals[ns.Platform] = platBytes / bytesPerLine
 	}
+	linesOfCode := int(realBytes / bytesPerLine)
 
 	streak := computeStreak(mergedContribs)
 	streakVals := make(map[PlatformName]int64)
