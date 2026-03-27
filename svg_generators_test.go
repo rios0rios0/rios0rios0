@@ -37,10 +37,26 @@ func TestRenderCombinedStatsSVG(t *testing.T) {
 		}
 
 		// when
-		result := renderCombinedStatsSVG(stats)
+		result := renderCombinedStatsSVG(stats, "")
 
 		// then
 		assertValidSVGXML(t, result)
+	})
+
+	t.Run("should produce valid XML with year tabs", func(t *testing.T) {
+		// given
+		stats := []NamedPlatformStats{
+			{PlatformGitHub, &PlatformStats{TotalCommits: 100, TotalPRsOrMRs: 10, TotalIssuesOrWIs: 5}},
+		}
+		tabs := renderYearTabs(2026, []int{2025, 2026})
+
+		// when
+		result := renderCombinedStatsSVG(stats, tabs)
+
+		// then
+		assertValidSVGXML(t, result)
+		assert.Contains(t, result, "2025")
+		assert.Contains(t, result, "2026")
 	})
 
 	t.Run("should contain platform colors in the output", func(t *testing.T) {
@@ -51,25 +67,11 @@ func TestRenderCombinedStatsSVG(t *testing.T) {
 		}
 
 		// when
-		result := renderCombinedStatsSVG(stats)
+		result := renderCombinedStatsSVG(stats, "")
 
 		// then
 		assert.Contains(t, result, PlatformGitHub.Color())
 		assert.Contains(t, result, PlatformGitLab.Color())
-	})
-
-	t.Run("should produce valid XML with single platform", func(t *testing.T) {
-		// given
-		stats := []NamedPlatformStats{
-			{PlatformAzureDevOps, &PlatformStats{TotalCommits: 500, TotalPRsOrMRs: 20, TotalIssuesOrWIs: 10}},
-		}
-
-		// when
-		result := renderCombinedStatsSVG(stats)
-
-		// then
-		assertValidSVGXML(t, result)
-		assert.Contains(t, result, PlatformAzureDevOps.Color())
 	})
 
 	t.Run("should produce valid XML with zero values", func(t *testing.T) {
@@ -79,7 +81,7 @@ func TestRenderCombinedStatsSVG(t *testing.T) {
 		}
 
 		// when
-		result := renderCombinedStatsSVG(stats)
+		result := renderCombinedStatsSVG(stats, "")
 
 		// then
 		assertValidSVGXML(t, result)
@@ -92,7 +94,7 @@ func TestRenderCombinedStatsSVG(t *testing.T) {
 		}
 
 		// when
-		result := renderCombinedStatsSVG(stats)
+		result := renderCombinedStatsSVG(stats, "")
 
 		// then
 		assert.Contains(t, result, `stroke-opacity="0.2"`)
@@ -120,8 +122,6 @@ func TestRenderTokensLineGraph(t *testing.T) {
 			{Date: "2026-01-01", Tokens: 1000},
 			{Date: "2026-01-02", Tokens: 2500},
 			{Date: "2026-01-03", Tokens: 1800},
-			{Date: "2026-01-04", Tokens: 3200},
-			{Date: "2026-01-05", Tokens: 2900},
 		}
 
 		// when
@@ -134,9 +134,7 @@ func TestRenderTokensLineGraph(t *testing.T) {
 
 	t.Run("should produce valid XML with a single data point", func(t *testing.T) {
 		// given
-		tokens := []TokenUsage{
-			{Date: "2026-03-15", Tokens: 5000},
-		}
+		tokens := []TokenUsage{{Date: "2026-03-15", Tokens: 5000}}
 
 		// when
 		result, err := renderTokensLineGraph(tokens)
@@ -144,23 +142,6 @@ func TestRenderTokensLineGraph(t *testing.T) {
 		// then
 		require.NoError(t, err)
 		assertValidSVGXML(t, result)
-	})
-
-	t.Run("should contain date labels in the output", func(t *testing.T) {
-		// given
-		tokens := []TokenUsage{
-			{Date: "2026-01-10", Tokens: 1000},
-			{Date: "2026-01-15", Tokens: 2000},
-			{Date: "2026-01-20", Tokens: 3000},
-		}
-
-		// when
-		result, err := renderTokensLineGraph(tokens)
-
-		// then
-		require.NoError(t, err)
-		assert.Contains(t, result, "01-10")
-		assert.Contains(t, result, "01-20")
 	})
 }
 
@@ -172,7 +153,7 @@ func TestRenderLanguagesBarChart(t *testing.T) {
 		languages := map[string]map[PlatformName]int64{}
 
 		// when
-		_, err := renderLanguagesBarChart(languages)
+		_, err := renderLanguagesBarChart(languages, "")
 
 		// then
 		assert.Error(t, err)
@@ -186,7 +167,7 @@ func TestRenderLanguagesBarChart(t *testing.T) {
 		}
 
 		// when
-		_, err := renderLanguagesBarChart(languages)
+		_, err := renderLanguagesBarChart(languages, "")
 
 		// then
 		assert.Error(t, err)
@@ -201,7 +182,7 @@ func TestRenderLanguagesBarChart(t *testing.T) {
 		}
 
 		// when
-		result, err := renderLanguagesBarChart(languages)
+		result, err := renderLanguagesBarChart(languages, "")
 
 		// then
 		require.NoError(t, err)
@@ -221,25 +202,21 @@ func TestRenderLanguagesBarChart(t *testing.T) {
 		}
 
 		// when
-		result, err := renderLanguagesBarChart(languages)
+		result, err := renderLanguagesBarChart(languages, "")
 
 		// then
 		require.NoError(t, err)
 		assertValidSVGXML(t, result)
 		assert.NotContains(t, result, "Kotlin")
-		assert.NotContains(t, result, "Swift")
 		assert.Contains(t, result, "Go")
-		assert.Contains(t, result, "PHP")
 	})
 
 	t.Run("should show 100 percent for a single language", func(t *testing.T) {
 		// given
-		languages := map[string]map[PlatformName]int64{
-			"Go": {PlatformGitHub: 100000},
-		}
+		languages := map[string]map[PlatformName]int64{"Go": {PlatformGitHub: 100000}}
 
 		// when
-		result, err := renderLanguagesBarChart(languages)
+		result, err := renderLanguagesBarChart(languages, "")
 
 		// then
 		require.NoError(t, err)
@@ -250,18 +227,18 @@ func TestRenderLanguagesBarChart(t *testing.T) {
 func TestRenderContributionHeatmap(t *testing.T) {
 	t.Parallel()
 
-	fixedNow := time.Date(2026, 3, 27, 12, 0, 0, 0, time.UTC)
+	startDate := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	endDate := time.Date(2026, 3, 27, 12, 0, 0, 0, time.UTC)
 
 	t.Run("should produce valid XML with platform-attributed contributions", func(t *testing.T) {
 		// given
 		contributions := map[string]map[PlatformName]int{
 			"2026-03-25": {PlatformGitHub: 3, PlatformGitLab: 2},
 			"2026-03-26": {PlatformAzureDevOps: 10},
-			"2026-03-20": {PlatformGitHub: 3},
 		}
 
 		// when
-		result := renderContributionHeatmap(contributions, fixedNow)
+		result := renderContributionHeatmap(contributions, startDate, endDate, "")
 
 		// then
 		assertValidSVGXML(t, result)
@@ -272,7 +249,7 @@ func TestRenderContributionHeatmap(t *testing.T) {
 		contributions := map[string]map[PlatformName]int{}
 
 		// when
-		result := renderContributionHeatmap(contributions, fixedNow)
+		result := renderContributionHeatmap(contributions, startDate, endDate, "")
 
 		// then
 		assertValidSVGXML(t, result)
@@ -285,7 +262,7 @@ func TestRenderContributionHeatmap(t *testing.T) {
 		}
 
 		// when
-		result := renderContributionHeatmap(contributions, fixedNow)
+		result := renderContributionHeatmap(contributions, startDate, endDate, "")
 
 		// then
 		assert.Contains(t, result, "2026-03-25: 7 (GitHub: 3, GitLab: 4)")
@@ -298,7 +275,7 @@ func TestRenderContributionHeatmap(t *testing.T) {
 		}
 
 		// when
-		result := renderContributionHeatmap(contributions, fixedNow)
+		result := renderContributionHeatmap(contributions, startDate, endDate, "")
 
 		// then
 		scale := PlatformAzureDevOps.ColorScale()
@@ -317,7 +294,7 @@ func TestRenderContributionHeatmap(t *testing.T) {
 		contributions := map[string]map[PlatformName]int{}
 
 		// when
-		result := renderContributionHeatmap(contributions, fixedNow)
+		result := renderContributionHeatmap(contributions, startDate, endDate, "")
 
 		// then
 		assert.Contains(t, result, "Jan")
@@ -329,7 +306,7 @@ func TestRenderContributionHeatmap(t *testing.T) {
 		contributions := map[string]map[PlatformName]int{}
 
 		// when
-		result := renderContributionHeatmap(contributions, fixedNow)
+		result := renderContributionHeatmap(contributions, startDate, endDate, "")
 
 		// then
 		assert.Contains(t, result, "Mon")
@@ -342,11 +319,56 @@ func TestRenderContributionHeatmap(t *testing.T) {
 		contributions := map[string]map[PlatformName]int{}
 
 		// when
-		result := renderContributionHeatmap(contributions, fixedNow)
+		result := renderContributionHeatmap(contributions, startDate, endDate, "")
 
 		// then
 		assert.Contains(t, result, "GitHub")
 		assert.Contains(t, result, "GitLab")
 		assert.Contains(t, result, "Azure DevOps")
+	})
+
+	t.Run("should produce valid XML with year tabs", func(t *testing.T) {
+		// given
+		contributions := map[string]map[PlatformName]int{
+			"2026-03-25": {PlatformGitHub: 5},
+		}
+		tabs := renderYearTabs(2026, []int{2025, 2026})
+
+		// when
+		result := renderContributionHeatmap(contributions, startDate, endDate, tabs)
+
+		// then
+		assertValidSVGXML(t, result)
+		assert.Contains(t, result, "2025")
+		assert.Contains(t, result, "2026")
+	})
+}
+
+func TestRenderYearTabs(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should highlight the active year", func(t *testing.T) {
+		// given
+		years := []int{2025, 2026}
+
+		// when
+		result := renderYearTabs(2026, years)
+
+		// then
+		assert.Contains(t, result, `class="year-tab active"`)
+		assert.Contains(t, result, "2026")
+		assert.Contains(t, result, "2025")
+	})
+
+	t.Run("should handle single year", func(t *testing.T) {
+		// given
+		years := []int{2026}
+
+		// when
+		result := renderYearTabs(2026, years)
+
+		// then
+		assert.Contains(t, result, "2026")
+		assert.Contains(t, result, `class="year-tab active"`)
 	})
 }

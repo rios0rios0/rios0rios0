@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -72,6 +74,165 @@ func (p PlatformName) ColorScale() [4]string {
 type NamedPlatformStats struct {
 	Platform PlatformName
 	Stats    *PlatformStats
+}
+
+// --- History ---
+
+type PlatformSnapshot struct {
+	TotalCommits       int              `json:"total_commits"`
+	TotalPRsOrMRs      int              `json:"total_prs_or_mrs"`
+	TotalIssuesOrWIs   int              `json:"total_issues_or_wis"`
+	Languages          map[string]int64 `json:"languages"`
+	DailyContributions map[string]int   `json:"daily_contributions"`
+}
+
+type DailySnapshot struct {
+	Date      string                          `json:"date"`
+	Platforms map[PlatformName]PlatformSnapshot `json:"platforms"`
+}
+
+type StatsHistory struct {
+	Version   int             `json:"version"`
+	Snapshots []DailySnapshot `json:"snapshots"`
+}
+
+func loadStatsHistory(path string) (*StatsHistory, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &StatsHistory{Version: 1}, nil
+		}
+		return nil, err
+	}
+	var history StatsHistory
+	if err = json.Unmarshal(data, &history); err != nil {
+		return nil, err
+	}
+	return &history, nil
+}
+
+func saveStatsHistory(history *StatsHistory, path string) error {
+	data, err := json.MarshalIndent(history, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
+}
+
+func addSnapshot(history *StatsHistory, date string, platforms []NamedPlatformStats) {
+	snap := DailySnapshot{
+		Date:      date,
+		Platforms: make(map[PlatformName]PlatformSnapshot),
+	}
+	for _, ns := range platforms {
+		snap.Platforms[ns.Platform] = PlatformSnapshot{
+			TotalCommits:       ns.Stats.TotalCommits,
+			TotalPRsOrMRs:      ns.Stats.TotalPRsOrMRs,
+			TotalIssuesOrWIs:   ns.Stats.TotalIssuesOrWIs,
+			Languages:          ns.Stats.Languages,
+			DailyContributions: ns.Stats.DailyContributions,
+		}
+	}
+	// Replace existing snapshot for this date or append
+	for i, s := range history.Snapshots {
+		if s.Date == date {
+			history.Snapshots[i] = snap
+			return
+		}
+	}
+	history.Snapshots = append(history.Snapshots, snap)
+}
+
+func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
+	// Collect per-year, per-platform: max totals, merged contributions (max per date), latest languages
+	type accumEntry struct {
+		maxCommits    int
+		maxPRs        int
+		maxIssues     int
+		contributions map[string]int // date -> max count
+		languages     map[string]int64
+		latestDate    string
+	}
+
+	yearPlatform := make(map[int]map[PlatformName]*accumEntry)
+
+	for _, snap := range history.Snapshots {
+		snapYear := 0
+		if len(snap.Date) >= 4 {
+			fmt.Sscanf(snap.Date, "%d", &snapYear)
+		}
+
+		for platform, ps := range snap.Platforms {
+			// Accumulate stat totals for the snapshot's own year
+			if snapYear > 0 {
+				if yearPlatform[snapYear] == nil {
+					yearPlatform[snapYear] = make(map[PlatformName]*accumEntry)
+				}
+				entry := yearPlatform[snapYear][platform]
+				if entry == nil {
+					entry = &accumEntry{contributions: make(map[string]int), languages: make(map[string]int64)}
+					yearPlatform[snapYear][platform] = entry
+				}
+				if ps.TotalCommits > entry.maxCommits {
+					entry.maxCommits = ps.TotalCommits
+				}
+				if ps.TotalPRsOrMRs > entry.maxPRs {
+					entry.maxPRs = ps.TotalPRsOrMRs
+				}
+				if ps.TotalIssuesOrWIs > entry.maxIssues {
+					entry.maxIssues = ps.TotalIssuesOrWIs
+				}
+				if snap.Date > entry.latestDate {
+					entry.latestDate = snap.Date
+					entry.languages = ps.Languages
+				}
+			}
+
+			// Distribute daily contributions to their respective years
+			for date, count := range ps.DailyContributions {
+				contribYear := 0
+				if len(date) >= 4 {
+					fmt.Sscanf(date, "%d", &contribYear)
+				}
+				if contribYear == 0 {
+					continue
+				}
+				if yearPlatform[contribYear] == nil {
+					yearPlatform[contribYear] = make(map[PlatformName]*accumEntry)
+				}
+				entry := yearPlatform[contribYear][platform]
+				if entry == nil {
+					entry = &accumEntry{contributions: make(map[string]int), languages: make(map[string]int64)}
+					yearPlatform[contribYear][platform] = entry
+				}
+				if count > entry.contributions[date] {
+					entry.contributions[date] = count
+				}
+			}
+		}
+	}
+
+	// Convert to []NamedPlatformStats per year
+	result := make(map[int][]NamedPlatformStats)
+	for year, platforms := range yearPlatform {
+		for _, p := range platformOrder {
+			entry := platforms[p]
+			if entry == nil {
+				continue
+			}
+			result[year] = append(result[year], NamedPlatformStats{
+				Platform: p,
+				Stats: &PlatformStats{
+					TotalCommits:       entry.maxCommits,
+					TotalPRsOrMRs:      entry.maxPRs,
+					TotalIssuesOrWIs:   entry.maxIssues,
+					Languages:          entry.languages,
+					DailyContributions: entry.contributions,
+				},
+			})
+		}
+	}
+	return result
 }
 
 // --- GitHub ---
@@ -681,7 +842,7 @@ func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, er
 
 // --- SVG Generators ---
 
-func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
+func renderCombinedStatsSVG(platformStats []NamedPlatformStats, yearTabs string) string {
 	printer := message.NewPrinter(language.English)
 
 	type statRow struct {
@@ -781,7 +942,18 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 
 	legend := renderPlatformLegend(25, 0, platformStats)
 
-	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="195" viewBox="0 0 400 195" fill="none" role="img">
+	yearTabsHeight := 0
+	yearTabsBlock := ""
+	if yearTabs != "" {
+		yearTabsHeight = 25
+		yearTabsBlock = fmt.Sprintf(`<g transform="translate(25, 10)">%s</g>`, yearTabs)
+	}
+	svgHeight := 195 + yearTabsHeight
+	titleY := 35 + yearTabsHeight
+	bodyY := 55 + yearTabsHeight
+	legendY := 170 + yearTabsHeight
+
+	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="%d" viewBox="0 0 400 %d" fill="none" role="img">
 <title>Combined Stats</title>
 <style>
 	.header { font: 600 14px 'Segoe UI', Ubuntu, Sans-Serif; fill: #fff; animation: fadeInAnimation 0.8s ease-in-out forwards; }
@@ -789,22 +961,25 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 	.bold { font-weight: 700 }
 	.icon { fill: #79ff97; display: block; }
 	.legend-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
+	.year-tab { font: 600 11px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
+	.year-tab.active { fill: #fff; }
 	.stagger { opacity: 0; animation: fadeInAnimation 0.3s ease-in-out forwards; }
 	@keyframes fadeInAnimation { from { opacity: 0; } to { opacity: 1; } }
 </style>
 <rect data-testid="card-bg" x="0.5" y="0.5" rx="4.5" height="99%%" width="399" fill="#151515" stroke="#e4e2e2" stroke-opacity="0.2"/>
-<g data-testid="card-title" transform="translate(25, 35)">
+%s
+<g data-testid="card-title" transform="translate(25, %d)">
 	<text x="0" y="0" class="header" data-testid="header">Stats (across all platforms)</text>
 </g>
-<g data-testid="main-card-body" transform="translate(0, 55)">
+<g data-testid="main-card-body" transform="translate(0, %d)">
 	<svg x="0" y="0">%s</svg>
 </g>
-<g transform="translate(0, 170)">%s</g>
-</svg>`, body, legend)
+<g transform="translate(0, %d)">%s</g>
+</svg>`, svgHeight, svgHeight, yearTabsBlock, titleY, bodyY, body, legendY, legend)
 }
 
-func GenerateCombinedStatsSVG(platformStats []NamedPlatformStats, outputPath string) error {
-	svgContent := renderCombinedStatsSVG(platformStats)
+func GenerateCombinedStatsSVG(platformStats []NamedPlatformStats, yearTabs, outputPath string) error {
+	svgContent := renderCombinedStatsSVG(platformStats, yearTabs)
 	return os.WriteFile(outputPath, []byte(svgContent), 0644)
 }
 
@@ -929,7 +1104,7 @@ func GenerateTokensLineGraph(tokens []TokenUsage, outputPath string) error {
 	return os.WriteFile(outputPath, []byte(svg), 0644)
 }
 
-func renderLanguagesBarChart(languages map[string]map[PlatformName]int64) (string, error) {
+func renderLanguagesBarChart(languages map[string]map[PlatformName]int64, yearTabs string) (string, error) {
 	// Calculate totals and sort
 	type langEntry struct {
 		Name      string
@@ -965,7 +1140,11 @@ func renderLanguagesBarChart(languages map[string]map[PlatformName]int64) (strin
 	barGap := 6
 	padLeft := 110
 	padRight := 60
-	padTop := 35
+	yearTabsHeight := 0
+	if yearTabs != "" {
+		yearTabsHeight = 25
+	}
+	padTop := 35 + yearTabsHeight
 	graphW := width - padLeft - padRight
 	legendHeight := 25
 	height := padTop + len(entries)*(barHeight+barGap) + legendHeight + 10
@@ -1028,43 +1207,61 @@ func renderLanguagesBarChart(languages map[string]map[PlatformName]int64) (strin
 		dx += 14 + len(string(p))*7 + 12
 	}
 
+	yearTabsBlock := ""
+	titleY := 22
+	if yearTabs != "" {
+		yearTabsBlock = fmt.Sprintf(`<g transform="translate(20, 5)">%s</g>`, yearTabs)
+		titleY += yearTabsHeight
+	}
+
 	svg := fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">
 <style>
 	.title { font: 600 14px 'Segoe UI', Ubuntu, Sans-Serif; fill: #fff; }
 	.lang-label { font: 400 12px 'Segoe UI', Ubuntu, Sans-Serif; fill: #c9d1d9; }
 	.pct-label { font: 400 11px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
 	.legend-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
+	.year-tab { font: 600 11px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
+	.year-tab.active { fill: #fff; }
 	.bar { opacity: 0; animation: barGrow 0.5s ease-out forwards; }
 	@keyframes barGrow { from { opacity: 0; width: 0; } to { opacity: 1; } }
 </style>
 <rect width="%d" height="%d" rx="4.5" fill="#151515" stroke="#e4e2e2" stroke-opacity="0.2"/>
-<text x="20" y="22" class="title">Top Languages (across all platforms)</text>
+%s
+<text x="20" y="%d" class="title">Top Languages (across all platforms)</text>
 %s
 %s
-</svg>`, width, height, width, height, width, height, bars, legend)
+</svg>`, width, height, width, height, width, height, yearTabsBlock, titleY, bars, legend)
 
 	return svg, nil
 }
 
-func GenerateLanguagesBarChart(languages map[string]map[PlatformName]int64, outputPath string) error {
-	svg, err := renderLanguagesBarChart(languages)
+func GenerateLanguagesBarChart(languages map[string]map[PlatformName]int64, yearTabs, outputPath string) error {
+	svg, err := renderLanguagesBarChart(languages, yearTabs)
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(outputPath, []byte(svg), 0644)
 }
 
-func renderContributionHeatmap(contributions map[string]map[PlatformName]int, now time.Time) string {
+func renderContributionHeatmap(contributions map[string]map[PlatformName]int, startDate, endDate time.Time, yearTabs string) string {
 	cellSize := 13
 	cellGap := 3
 	padLeft := 35
-	padTop := 35
+	yearTabsHeight := 0
+	if yearTabs != "" {
+		yearTabsHeight = 25
+	}
+	padTop := 35 + yearTabsHeight
 	padBottom := 40
 	legendHeight := 20
 
-	startDate := now.AddDate(0, 0, -364)
-	for startDate.Weekday() != time.Sunday {
-		startDate = startDate.AddDate(0, 0, -1)
+	// For a full calendar-year view (Jan 1 start), do not rewind to the previous
+	// Sunday as that would include days from the previous year.
+	isCalendarYear := startDate.Day() == 1 && startDate.Month() == time.January
+	if !isCalendarYear {
+		for startDate.Weekday() != time.Sunday {
+			startDate = startDate.AddDate(0, 0, -1)
+		}
 	}
 
 	// Find max total count across all days
@@ -1113,7 +1310,11 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, no
 		}
 	}
 
-	weeks := 53
+	totalDays := int(endDate.Sub(startDate).Hours()/24) + 1
+	weeks := (totalDays + 6) / 7
+	if weeks < 1 {
+		weeks = 1
+	}
 	width := padLeft + weeks*(cellSize+cellGap) + 10
 	height := padTop + 7*(cellSize+cellGap) + padBottom + legendHeight
 
@@ -1142,7 +1343,7 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, no
 	for w := 0; w < weeks; w++ {
 		for d := 0; d < 7; d++ {
 			date := startDate.AddDate(0, 0, w*7+d)
-			if date.After(now) {
+			if date.After(endDate) {
 				continue
 			}
 			dateStr := date.Format("2006-01-02")
@@ -1182,21 +1383,34 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, no
 		dx += 14 + len(string(p))*7 + 12
 	}
 
+	yearTabsBlock := ""
+	if yearTabs != "" {
+		yearTabsBlock = fmt.Sprintf(`<g transform="translate(20, 5)">%s</g>`, yearTabs)
+	}
+
+	titleY := 18
+	if yearTabsHeight > 0 {
+		titleY += yearTabsHeight
+	}
+
 	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">
 <style>
 	.title { font: 600 14px 'Segoe UI', Ubuntu, Sans-Serif; fill: #fff; }
 	.day-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
 	.month-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
 	.legend-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
+	.year-tab { font: 600 11px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
+	.year-tab.active { fill: #fff; }
 </style>
 <rect width="%d" height="%d" rx="4.5" fill="#151515" stroke="#e4e2e2" stroke-opacity="0.2"/>
-<text x="20" y="18" class="title">Contributions (across all platforms)</text>
 %s
-</svg>`, width, height, width, height, width, height, cells)
+<text x="20" y="%d" class="title">Contributions (across all platforms)</text>
+%s
+</svg>`, width, height, width, height, width, height, yearTabsBlock, titleY, cells)
 }
 
-func GenerateContributionHeatmap(contributions map[string]map[PlatformName]int, outputPath string) error {
-	svg := renderContributionHeatmap(contributions, time.Now())
+func GenerateContributionHeatmap(contributions map[string]map[PlatformName]int, startDate, endDate time.Time, yearTabs, outputPath string) error {
+	svg := renderContributionHeatmap(contributions, startDate, endDate, yearTabs)
 	return os.WriteFile(outputPath, []byte(svg), 0644)
 }
 
@@ -1255,6 +1469,23 @@ func renderPlatformLegend(x, y int, platforms []NamedPlatformStats) string {
 	return legend
 }
 
+func renderYearTabs(currentYear int, allYears []int) string {
+	sort.Ints(allYears)
+	var tabs string
+	dx := 0
+	for _, year := range allYears {
+		label := strconv.Itoa(year)
+		if year == currentYear {
+			tabs += fmt.Sprintf(`<rect x="%d" y="2" width="40" height="18" rx="3" fill="#30363d"/>`, dx)
+			tabs += fmt.Sprintf(`<text x="%d" y="15" text-anchor="middle" class="year-tab active">%s</text>`, dx+20, label)
+		} else {
+			tabs += fmt.Sprintf(`<text x="%d" y="15" text-anchor="middle" class="year-tab">%s</text>`, dx+20, label)
+		}
+		dx += 48
+	}
+	return tabs
+}
+
 func loadTokenUsage(path string) ([]TokenUsage, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -1271,10 +1502,32 @@ func loadTokenUsage(path string) ([]TokenUsage, error) {
 
 // --- Main ---
 
+func getEnvOrDefault(key, defaultVal string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return defaultVal
+}
+
 func main() {
+	now := time.Now()
+	today := now.Format("2006-01-02")
+	currentYear := now.Year()
+
+	historyPath := getEnvOrDefault("STATS_HISTORY_PATH", "stats_history.json")
+	outputDir := getEnvOrDefault("SVG_OUTPUT_DIR", ".")
+
+	// 1. Load existing history
+	history, err := loadStatsHistory(historyPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not load history from %s: %v\n", historyPath, err)
+		historyPath = historyPath + ".new"
+		history = &StatsHistory{Version: 1}
+	}
+
+	// 2. Fetch fresh platform data
 	var namedStats []NamedPlatformStats
 
-	// GitHub
 	ghUsername := os.Getenv("GITHUB_USERNAME")
 	ghToken := os.Getenv("GH_TOKEN")
 	if ghUsername != "" && ghToken != "" {
@@ -1288,7 +1541,6 @@ func main() {
 		}
 	}
 
-	// GitLab
 	glUsername := os.Getenv("GITLAB_USERNAME")
 	glToken := os.Getenv("GITLAB_ACCESS_TOKEN")
 	if glUsername != "" && glToken != "" {
@@ -1302,7 +1554,6 @@ func main() {
 		}
 	}
 
-	// Azure DevOps
 	adoOrg := os.Getenv("AZURE_DEVOPS_ORG")
 	adoToken := os.Getenv("AZURE_DEVOPS_ACCESS_TOKEN")
 	if adoOrg != "" && adoToken != "" {
@@ -1322,39 +1573,90 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 1. Generate combined stats SVG
-	fmt.Println("Generating combined stats SVG...")
-	if err := GenerateCombinedStatsSVG(namedStats, "combined_stats_final.svg"); err != nil {
-		fmt.Printf("Error generating combined stats SVG: %v\n", err)
+	// 3. Save today's snapshot to history
+	addSnapshot(history, today, namedStats)
+	if err := saveStatsHistory(history, historyPath); err != nil {
+		fmt.Printf("Error saving history: %v\n", err)
 		os.Exit(1)
 	}
+	fmt.Printf("Saved snapshot for %s to %s\n", today, historyPath)
 
-	// 2. Generate Claude Code tokens line graph
+	// 4. Build per-year accumulated data
+	yearlyStats := accumulateByYear(history)
+	var years []int
+	for y := range yearlyStats {
+		years = append(years, y)
+	}
+	sort.Ints(years)
+
+	// 5. Generate per-year SVGs
+	hadErrors := false
+	for _, year := range years {
+		stats := yearlyStats[year]
+		suffix := fmt.Sprintf("_%d.svg", year)
+		yearTabs := renderYearTabs(year, years)
+
+		fmt.Printf("Generating SVGs for %d...\n", year)
+
+		// Combined stats
+		if err := GenerateCombinedStatsSVG(stats, yearTabs, filepath.Join(outputDir, "combined_stats"+suffix)); err != nil {
+			fmt.Printf("Error generating combined stats SVG for %d: %v\n", year, err)
+			hadErrors = true
+		}
+
+		// Languages
+		langsByPlatform := aggregateLanguagesByPlatform(stats)
+		if err := GenerateLanguagesBarChart(langsByPlatform, yearTabs, filepath.Join(outputDir, "top_languages"+suffix)); err != nil {
+			fmt.Printf("Error generating languages chart for %d: %v\n", year, err)
+			hadErrors = true
+		}
+
+		// Contribution heatmap
+		contribsByPlatform := aggregateContributionsByPlatform(stats)
+		var startDate, endDate time.Time
+		if year == currentYear {
+			startDate = time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)
+			endDate = now.UTC()
+		} else {
+			startDate = time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)
+			endDate = time.Date(year, 12, 31, 23, 59, 59, 0, time.UTC)
+		}
+		if err := GenerateContributionHeatmap(contribsByPlatform, startDate, endDate, yearTabs, filepath.Join(outputDir, "contributions"+suffix)); err != nil {
+			fmt.Printf("Error generating contribution heatmap for %d: %v\n", year, err)
+			hadErrors = true
+		}
+	}
+
+	// 6. Copy current year SVGs to _final.svg for backward compatibility
+	for _, base := range []string{"combined_stats", "top_languages", "contributions"} {
+		src := filepath.Join(outputDir, fmt.Sprintf("%s_%d.svg", base, currentYear))
+		dst := filepath.Join(outputDir, base+"_final.svg")
+
+		data, err := os.ReadFile(src)
+		if err != nil {
+			fmt.Printf("Warning: could not read %s for backward-compatibility copy: %v\n", src, err)
+			continue
+		}
+		if err := os.WriteFile(dst, data, 0644); err != nil {
+			fmt.Printf("Error writing backward-compatibility file %s: %v\n", dst, err)
+			hadErrors = true
+		}
+	}
+
+	// 7. Generate Claude Code tokens line graph (not year-based)
 	tokenData, err := loadTokenUsage("claude_tokens.json")
 	if err != nil {
 		fmt.Printf("Warning: could not load Claude Code token data: %v (skipping tokens graph)\n", err)
 	} else {
 		fmt.Println("Generating Claude Code tokens graph...")
-		if err = GenerateTokensLineGraph(tokenData, "claude_tokens_final.svg"); err != nil {
+		if err = GenerateTokensLineGraph(tokenData, filepath.Join(outputDir, "claude_tokens_final.svg")); err != nil {
 			fmt.Printf("Error generating tokens graph: %v\n", err)
 		}
 	}
 
-	// 3. Generate top languages bar chart
-	fmt.Println("Generating languages bar chart...")
-	langsByPlatform := aggregateLanguagesByPlatform(namedStats)
-	if err := GenerateLanguagesBarChart(langsByPlatform, "top_languages_final.svg"); err != nil {
-		fmt.Printf("Error generating languages chart: %v\n", err)
+	if hadErrors {
+		fmt.Println("SVG generation completed with errors.")
 		os.Exit(1)
 	}
-
-	// 4. Generate contribution heatmap
-	fmt.Println("Generating contribution heatmap...")
-	contribsByPlatform := aggregateContributionsByPlatform(namedStats)
-	if err := GenerateContributionHeatmap(contribsByPlatform, "contributions_final.svg"); err != nil {
-		fmt.Printf("Error generating contribution heatmap: %v\n", err)
-		os.Exit(1)
-	}
-
 	fmt.Println("All SVGs generated successfully!")
 }

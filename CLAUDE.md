@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Go application that fetches user statistics from GitHub, GitLab, and Azure DevOps APIs and generates SVG visualizations (combined stats, Claude token usage line graph, top languages bar chart, contribution heatmap) for a GitHub profile README. Runs daily via GitHub Actions, outputting SVGs to a `stats` branch.
+Go application that fetches user statistics from GitHub, GitLab, and Azure DevOps APIs and generates SVG visualizations for a GitHub profile README. Persists daily snapshots to `stats_history.json` for historical accumulation, then generates per-year SVG widgets. Runs daily via GitHub Actions, outputting to the `stats` branch.
 
 ## Build and Test Commands
 
@@ -27,7 +27,7 @@ go fmt ./... && go vet ./...
 
 ## Environment Variables
 
-The application runs whichever platforms have credentials set. At least one platform must be configured:
+Platform credentials (at least one required):
 
 | Variable | Platform |
 |---|---|
@@ -35,21 +35,28 @@ The application runs whichever platforms have credentials set. At least one plat
 | `GITLAB_USERNAME`, `GITLAB_ACCESS_TOKEN` | GitLab |
 | `AZURE_DEVOPS_ORG`, `AZURE_DEVOPS_ACCESS_TOKEN` | Azure DevOps |
 
+Path configuration (defaults work for local development):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `STATS_HISTORY_PATH` | `stats_history.json` | Path to read/write historical snapshots |
+| `SVG_OUTPUT_DIR` | `.` | Directory for generated SVG files |
+
 ## Architecture
 
-Single-package monolith (`package main` in `main.go`) with no domain/infrastructure separation. All logic lives in one file:
+Single-package monolith (`package main` in `main.go`). Key components:
 
-- **Platform types** (`PlatformName`, `NamedPlatformStats`): Typed platform identity with color and color-scale methods. Platform order is fixed: GitHub, GitLab, Azure DevOps
-- **Platform fetchers** (`FetchGitHubStats`, `FetchGitLabStats`, `FetchAzureDevOpsStats`): HTTP clients that call platform APIs and return `*PlatformStats`
-- **SVG renderers**: Pure functions that return SVG strings. Each has a `Generate*` wrapper that writes to disk
-  - `renderCombinedStatsSVG([]NamedPlatformStats)` -- code-generated stats card with per-platform stacked bars
-  - `renderTokensLineGraph([]TokenUsage)` -- line graph (no platform attribution)
-  - `renderLanguagesBarChart(map[string]map[PlatformName]int64)` -- stacked bars by platform per language
-  - `renderContributionHeatmap(map[string]map[PlatformName]int, time.Time)` -- heatmap with platform-colored cells
-- **Helpers** (`formatNumber`, `aggregateLanguagesByPlatform`, `aggregateContributionsByPlatform`, `renderPlatformLegend`, `loadTokenUsage`)
-- **`main()`**: Fetches from configured platforms into `[]NamedPlatformStats`, then passes per-platform data to renderers
+- **History system** (`StatsHistory`, `DailySnapshot`, `PlatformSnapshot`): JSON-based persistence. Each daily run saves a snapshot with per-platform stats. `accumulateByYear()` builds per-year views by scanning all snapshots and collecting contributions by year, taking max counts across snapshots.
+- **Platform types** (`PlatformName`, `NamedPlatformStats`): Typed platform identity with color/color-scale methods. Order: GitHub, GitLab, Azure DevOps.
+- **Platform fetchers** (`FetchGitHubStats`, `FetchGitLabStats`, `FetchAzureDevOpsStats`): HTTP clients returning `*PlatformStats`. GitHub uses GraphQL for contributions. All fail gracefully (skip platform on error).
+- **SVG renderers**: Pure functions returning SVG strings. Accept `yearTabs string` parameter for year tab bar. Each has a `Generate*` wrapper for disk I/O.
+  - `renderCombinedStatsSVG([]NamedPlatformStats, yearTabs)` -- stats card with stacked bars
+  - `renderTokensLineGraph([]TokenUsage)` -- line graph (not year-scoped)
+  - `renderLanguagesBarChart(map[string]map[PlatformName]int64, yearTabs)` -- stacked bar chart
+  - `renderContributionHeatmap(contribs, startDate, endDate, yearTabs)` -- heatmap with date range
+- **`main()` flow**: Load history -> fetch platforms -> save snapshot -> accumulate by year -> generate per-year SVGs -> copy current year to `_final.svg` -> generate tokens graph
 
-Platform colors: GitHub `#8b949e` (gray), GitLab `#e24329` (orange), Azure DevOps `#0078d4` (blue). All SVG cards share unified chrome: `rx="4.5"`, `fill="#151515"`, `stroke="#e4e2e2"`, `stroke-opacity="0.2"`.
+Platform colors: GitHub `#8b949e`, GitLab `#e24329`, Azure DevOps `#0078d4`. Unified card chrome: `rx="4.5"`, `fill="#151515"`, `stroke="#e4e2e2"`, `stroke-opacity="0.2"`.
 
 ## Testing
 
@@ -58,17 +65,20 @@ Platform colors: GitHub `#8b949e` (gray), GitLab `#e24329` (orange), Azure DevOp
 - Tests are parallel (`t.Parallel()` + `t.Run()`)
 - BDD structure with `// given`, `// when`, `// then` comments
 - SVG output validated as well-formed XML via `assertValidSVGXML` helper
-- Two test files: `helpers_test.go` (formatNumber, aggregation functions) and `svg_generators_test.go` (all four SVG renderers)
+- Two test files: `helpers_test.go` (formatNumber, aggregation, history persistence, year accumulation) and `svg_generators_test.go` (all four SVG renderers, year tabs)
 
 ## Generated Output Files
 
-| File | Content |
+Per-year SVGs (e.g., `combined_stats_2026.svg`) plus `_final.svg` aliases pointing to the current year:
+
+| Pattern | Content |
 |---|---|
-| `combined_stats_final.svg` | Unified stats card (commits, PRs, issues across platforms) |
-| `claude_tokens_final.svg` | Token usage line graph from `claude_tokens.json` |
-| `top_languages_final.svg` | Language bar chart by bytes |
-| `contributions_final.svg` | 52-week contribution heatmap |
+| `combined_stats_{year}.svg` | Stats card with stacked bars per metric |
+| `top_languages_{year}.svg` | Language bar chart stacked by platform |
+| `contributions_{year}.svg` | Contribution heatmap (Jan 1 - Dec 31 or today) |
+| `claude_tokens_final.svg` | Token usage line graph (not year-scoped) |
+| `stats_history.json` | Accumulated daily snapshots |
 
 ## CI/CD
 
-Single workflow (`.github/workflows/update-stats.yml`) runs daily at midnight UTC. Generates SVGs, amends the last commit, and force-pushes to the `stats` branch. Can be triggered manually via `workflow_dispatch`.
+Workflow (`.github/workflows/update-stats.yml`) runs daily at midnight UTC and on push to main. Dual-checkout strategy: checks out `stats` branch first (for `stats_history.json`), then `main` into `src/` subdirectory. Regular commits (not amend+force-push) to preserve history.
