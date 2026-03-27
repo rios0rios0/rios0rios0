@@ -14,18 +14,26 @@ jobs:
       contents: write
 
     steps:
-      - name: 'Checkout'
+      - name: 'Checkout stats branch'
         uses: 'actions/checkout@v5'
         with:
-          fetch-depth: 0
+          ref: 'stats'
+          fetch-depth: 1
+
+      - name: 'Checkout main source code'
+        uses: 'actions/checkout@v5'
+        with:
+          ref: 'main'
+          path: 'src'
 
       - name: 'Set Up Go'
         uses: 'actions/setup-go@v5'
         with:
           go-version: '1.26.1'
-          cache-dependency-path: go.sum
+          cache-dependency-path: 'src/go.sum'
 
       - name: 'Run Stats Generator'
+        working-directory: 'src'
         env:
           GITHUB_USERNAME: ${{ github.repository_owner }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
@@ -33,6 +41,8 @@ jobs:
           GITLAB_ACCESS_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
           AZURE_DEVOPS_ORG: ${{ secrets.AZURE_DEVOPS_ORG }}
           AZURE_DEVOPS_ACCESS_TOKEN: ${{ secrets.AZURE_DEVOPS_ACCESS_TOKEN }}
+          STATS_HISTORY_PATH: ${{ github.workspace }}/stats_history.json
+          SVG_OUTPUT_DIR: ${{ github.workspace }}
         run: |
           go run main.go
 
@@ -40,7 +50,7 @@ jobs:
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add combined_stats_final.svg claude_tokens_final.svg top_languages_final.svg contributions_final.svg
+          git add stats_history.json combined_stats_*.svg contributions_*.svg top_languages_*.svg claude_tokens_final.svg
           git diff --staged --quiet && echo "No changes to commit" && exit 0
-          git commit --amend --message "chore(update): updated repository with latest stats"
-          git push --force origin HEAD:stats
+          git commit --message "chore(update): updated repository with latest stats"
+          git push origin stats

@@ -7,14 +7,23 @@
 ---
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_final.svg" height="165" alt="combined stats graph" />
-  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/claude_tokens_final.svg" height="165" alt="claude code tokens graph" />
+  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_final.svg" height="190" alt="combined stats graph" />
+  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/claude_tokens_final.svg" height="190" alt="claude code tokens graph" />
 </div>
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/top_languages_final.svg" height="300" alt="top languages graph" />
-  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/contributions_final.svg" height="165" alt="contribution heatmap" />
+  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/top_languages_final.svg" height="325" alt="top languages graph" />
+  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/contributions_final.svg" height="190" alt="contribution heatmap" />
 </div>
+
+<details>
+<summary>View stats from previous years</summary>
+
+- [2025 Combined Stats](https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_2025.svg)
+- [2025 Contributions](https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/contributions_2025.svg)
+- [2025 Languages](https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/top_languages_2025.svg)
+
+</details>
 
 ---
 
