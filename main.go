@@ -1015,11 +1015,11 @@ func main() {
 		fmt.Println("Fetching GitHub stats...")
 		stats, err := FetchGitHubStats(ghUsername, ghToken)
 		if err != nil {
-			fmt.Printf("Error fetching GitHub stats: %v\n", err)
-			os.Exit(1)
+			fmt.Printf("Warning: skipping GitHub — %v\n", err)
+		} else {
+			fmt.Printf("GitHub: %d commits, %d PRs, %d issues\n", stats.TotalCommits, stats.TotalPRsOrMRs, stats.TotalIssuesOrWIs)
+			allStats = append(allStats, stats)
 		}
-		fmt.Printf("GitHub: %d commits, %d PRs, %d issues\n", stats.TotalCommits, stats.TotalPRsOrMRs, stats.TotalIssuesOrWIs)
-		allStats = append(allStats, stats)
 	}
 
 	// GitLab
@@ -1029,11 +1029,11 @@ func main() {
 		fmt.Println("Fetching GitLab stats...")
 		stats, err := FetchGitLabStats(glUsername, glToken)
 		if err != nil {
-			fmt.Printf("Error fetching GitLab stats: %v\n", err)
-			os.Exit(1)
+			fmt.Printf("Warning: skipping GitLab — %v\n", err)
+		} else {
+			fmt.Printf("GitLab: %d commits, %d MRs, %d issues\n", stats.TotalCommits, stats.TotalPRsOrMRs, stats.TotalIssuesOrWIs)
+			allStats = append(allStats, stats)
 		}
-		fmt.Printf("GitLab: %d commits, %d MRs, %d issues\n", stats.TotalCommits, stats.TotalPRsOrMRs, stats.TotalIssuesOrWIs)
-		allStats = append(allStats, stats)
 	}
 
 	// Azure DevOps
@@ -1043,11 +1043,11 @@ func main() {
 		fmt.Println("Fetching Azure DevOps stats...")
 		stats, err := FetchAzureDevOpsStats(adoOrg, adoToken)
 		if err != nil {
-			fmt.Printf("Error fetching Azure DevOps stats: %v\n", err)
-			os.Exit(1)
+			fmt.Printf("Warning: skipping Azure DevOps — %v\n", err)
+		} else {
+			fmt.Printf("Azure DevOps: %d commits, %d PRs, %d work items\n", stats.TotalCommits, stats.TotalPRsOrMRs, stats.TotalIssuesOrWIs)
+			allStats = append(allStats, stats)
 		}
-		fmt.Printf("Azure DevOps: %d commits, %d PRs, %d work items\n", stats.TotalCommits, stats.TotalPRsOrMRs, stats.TotalIssuesOrWIs)
-		allStats = append(allStats, stats)
 	}
 
 	if len(allStats) == 0 {
