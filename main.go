@@ -413,7 +413,7 @@ func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, er
 	}
 
 	// Get authenticated user info
-	connURL := fmt.Sprintf("https://dev.azure.com/%s/_apis/connectionData?api-version=7.0", url.PathEscape(organization))
+	connURL := fmt.Sprintf("https://dev.azure.com/%s/_apis/connectionData?api-version=7.0-preview", url.PathEscape(organization))
 	req, err := newRequest("GET", connURL, nil)
 	if err != nil {
 		return nil, err
@@ -638,27 +638,28 @@ func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, er
 
 // --- SVG Generators ---
 
-func GenerateCombinedStatsSVG(totalCommits, totalPRs, totalIssues, totalContributions int, outputPath string) error {
+func renderCombinedStatsSVG(templateContent string, totalCommits, totalPRs, totalIssues, totalContributions int) string {
 	printer := message.NewPrinter(language.English)
-
-	templateContent, err := os.ReadFile("combined_stats.svg")
-	if err != nil {
-		return err
-	}
-
-	svgContent := printer.Sprintf(string(templateContent),
+	return printer.Sprintf(templateContent,
 		totalCommits,
 		totalPRs,
 		totalIssues,
 		totalContributions,
 	)
+}
 
+func GenerateCombinedStatsSVG(totalCommits, totalPRs, totalIssues, totalContributions int, outputPath string) error {
+	templateContent, err := os.ReadFile("combined_stats.svg")
+	if err != nil {
+		return err
+	}
+	svgContent := renderCombinedStatsSVG(string(templateContent), totalCommits, totalPRs, totalIssues, totalContributions)
 	return os.WriteFile(outputPath, []byte(svgContent), 0644)
 }
 
-func GenerateTokensLineGraph(tokens []TokenUsage, outputPath string) error {
+func renderTokensLineGraph(tokens []TokenUsage) (string, error) {
 	if len(tokens) == 0 {
-		return fmt.Errorf("no token data")
+		return "", fmt.Errorf("no token data")
 	}
 
 	width := 800
@@ -766,10 +767,18 @@ func GenerateTokensLineGraph(tokens []TokenUsage, outputPath string) error {
 <path d="%s" fill="none" stroke="#8884d8" stroke-width="2"/>
 </svg>`, width, height, width, height, width, height, padLeft, yLabels, xLabels, areaPath, linePath)
 
+	return svg, nil
+}
+
+func GenerateTokensLineGraph(tokens []TokenUsage, outputPath string) error {
+	svg, err := renderTokensLineGraph(tokens)
+	if err != nil {
+		return err
+	}
 	return os.WriteFile(outputPath, []byte(svg), 0644)
 }
 
-func GenerateLanguagesBarChart(languages map[string]int64, outputPath string) error {
+func renderLanguagesBarChart(languages map[string]int64) (string, error) {
 	// Sort and take top 10
 	type langEntry struct {
 		Name  string
@@ -784,13 +793,16 @@ func GenerateLanguagesBarChart(languages map[string]int64, outputPath string) er
 		entries = entries[:10]
 	}
 	if len(entries) == 0 {
-		return fmt.Errorf("no language data")
+		return "", fmt.Errorf("no language data")
 	}
 
 	// Calculate total for percentages
 	var total int64
 	for _, e := range entries {
 		total += e.Bytes
+	}
+	if total == 0 {
+		return "", fmt.Errorf("all language byte counts are zero")
 	}
 
 	width := 400
@@ -833,12 +845,18 @@ func GenerateLanguagesBarChart(languages map[string]int64, outputPath string) er
 %s
 </svg>`, width, height, width, height, width, height, bars)
 
+	return svg, nil
+}
+
+func GenerateLanguagesBarChart(languages map[string]int64, outputPath string) error {
+	svg, err := renderLanguagesBarChart(languages)
+	if err != nil {
+		return err
+	}
 	return os.WriteFile(outputPath, []byte(svg), 0644)
 }
 
-func GenerateContributionHeatmap(contributions map[string]int, outputPath string) error {
-	// Generate for the last 52 weeks
-	now := time.Now()
+func renderContributionHeatmap(contributions map[string]int, now time.Time) string {
 	cellSize := 13
 	cellGap := 3
 	padLeft := 35
@@ -863,7 +881,7 @@ func GenerateContributionHeatmap(contributions map[string]int, outputPath string
 	width := padLeft + weeks*(cellSize+cellGap) + 10
 	height := padTop + 7*(cellSize+cellGap) + padBottom
 
-	// Color scale (GitHub-like but in purple/blue tones)
+	// Color scale (GitHub-like green tones)
 	getColor := func(count int) string {
 		if count == 0 {
 			return "#161b22"
@@ -922,7 +940,7 @@ func GenerateContributionHeatmap(contributions map[string]int, outputPath string
 		}
 	}
 
-	svg := fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">
+	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">
 <style>
 	.title { font: 600 14px 'Segoe UI', Ubuntu, Sans-Serif; fill: #fff; }
 	.day-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
@@ -932,7 +950,10 @@ func GenerateContributionHeatmap(contributions map[string]int, outputPath string
 <text x="20" y="18" class="title">Contributions (across all platforms)</text>
 %s
 </svg>`, width, height, width, height, width, height, cells)
+}
 
+func GenerateContributionHeatmap(contributions map[string]int, outputPath string) error {
+	svg := renderContributionHeatmap(contributions, time.Now())
 	return os.WriteFile(outputPath, []byte(svg), 0644)
 }
 
