@@ -39,12 +39,17 @@ The application runs whichever platforms have credentials set. At least one plat
 
 Single-package monolith (`package main` in `main.go`) with no domain/infrastructure separation. All logic lives in one file:
 
-- **Platform fetchers** (`FetchGitHubStats`, `FetchGitLabStats`, `FetchAzureDevOpsStats`): HTTP clients that call platform APIs and return `PlatformStats`
-- **SVG renderers** (`renderCombinedStatsSVG`, `renderTokensLineGraph`, `renderLanguagesBarChart`, `renderContributionHeatmap`): Pure functions that take data and return SVG strings. Each has a `Generate*` wrapper that writes to disk
-- **Helpers** (`formatNumber`, `mergeContributions`, `mergeLanguages`, `loadTokenUsage`): Utility functions used across renderers
-- **`main()`**: Orchestrates fetching from all configured platforms, merges stats, and generates all SVG files
+- **Platform types** (`PlatformName`, `NamedPlatformStats`): Typed platform identity with color and color-scale methods. Platform order is fixed: GitHub, GitLab, Azure DevOps
+- **Platform fetchers** (`FetchGitHubStats`, `FetchGitLabStats`, `FetchAzureDevOpsStats`): HTTP clients that call platform APIs and return `*PlatformStats`
+- **SVG renderers**: Pure functions that return SVG strings. Each has a `Generate*` wrapper that writes to disk
+  - `renderCombinedStatsSVG([]NamedPlatformStats)` -- code-generated stats card with per-platform stacked bars
+  - `renderTokensLineGraph([]TokenUsage)` -- line graph (no platform attribution)
+  - `renderLanguagesBarChart(map[string]map[PlatformName]int64)` -- stacked bars by platform per language
+  - `renderContributionHeatmap(map[string]map[PlatformName]int, time.Time)` -- heatmap with platform-colored cells
+- **Helpers** (`formatNumber`, `aggregateLanguagesByPlatform`, `aggregateContributionsByPlatform`, `renderPlatformLegend`, `loadTokenUsage`)
+- **`main()`**: Fetches from configured platforms into `[]NamedPlatformStats`, then passes per-platform data to renderers
 
-The `render*` functions are separated from `Generate*` wrappers specifically for testability -- tests call `render*` directly without filesystem side effects.
+Platform colors: GitHub `#8b949e` (gray), GitLab `#e24329` (orange), Azure DevOps `#0078d4` (blue). All SVG cards share unified chrome: `rx="4.5"`, `fill="#151515"`, `stroke="#e4e2e2"`, `stroke-opacity="0.2"`.
 
 ## Testing
 
@@ -53,7 +58,7 @@ The `render*` functions are separated from `Generate*` wrappers specifically for
 - Tests are parallel (`t.Parallel()` + `t.Run()`)
 - BDD structure with `// given`, `// when`, `// then` comments
 - SVG output validated as well-formed XML via `assertValidSVGXML` helper
-- Two test files: `helpers_test.go` (formatNumber, mergeContributions, mergeLanguages) and `svg_generators_test.go` (all four SVG renderers)
+- Two test files: `helpers_test.go` (formatNumber, aggregation functions) and `svg_generators_test.go` (all four SVG renderers)
 
 ## Generated Output Files
 
