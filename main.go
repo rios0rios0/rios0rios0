@@ -700,9 +700,9 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 		totalCommits += ns.Stats.TotalCommits
 		totalPRs += ns.Stats.TotalPRsOrMRs
 		totalIssues += ns.Stats.TotalIssuesOrWIs
-		commitVals[ns.Platform] = int64(ns.Stats.TotalCommits)
-		prVals[ns.Platform] = int64(ns.Stats.TotalPRsOrMRs)
-		issueVals[ns.Platform] = int64(ns.Stats.TotalIssuesOrWIs)
+		commitVals[ns.Platform] += int64(ns.Stats.TotalCommits)
+		prVals[ns.Platform] += int64(ns.Stats.TotalPRsOrMRs)
+		issueVals[ns.Platform] += int64(ns.Stats.TotalIssuesOrWIs)
 	}
 	totalContribs := totalCommits + totalPRs + totalIssues
 	contribVals := make(map[PlatformName]int64)
@@ -743,17 +743,34 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 		}
 		if barTotal > 0 {
 			bx := barAreaX
+			remaining := barAreaW
+			nonZero := 0
+			for _, p := range platformOrder {
+				if row.Values[p] > 0 {
+					nonZero++
+				}
+			}
 			for _, p := range platformOrder {
 				v := row.Values[p]
-				if v == 0 {
+				if v == 0 || remaining <= 0 || nonZero <= 0 {
 					continue
 				}
-				segW := int(float64(v) / float64(barTotal) * float64(barAreaW))
-				if segW < 2 {
-					segW = 2
+				var segW int
+				if nonZero == 1 {
+					segW = remaining
+				} else {
+					segW = int(float64(v) / float64(barTotal) * float64(barAreaW))
+					if segW < 2 {
+						segW = 2
+					}
+					if segW > remaining {
+						segW = remaining
+					}
 				}
 				body += fmt.Sprintf(`<rect x="%d" y="0" width="%d" height="16" rx="2" fill="%s"><title>%s: %d</title></rect>`, bx, segW, p.Color(), string(p), v)
 				bx += segW
+				remaining -= segW
+				nonZero--
 			}
 		}
 
@@ -968,20 +985,37 @@ func renderLanguagesBarChart(languages map[string]map[PlatformName]int64) (strin
 
 		// Stacked bar segments by platform
 		bx := padLeft
+		remaining := totalBarW
+		nonZero := 0
+		for _, p := range platformOrder {
+			if e.Platforms[p] > 0 {
+				nonZero++
+			}
+		}
 		for _, p := range platformOrder {
 			v := e.Platforms[p]
-			if v == 0 {
+			if v == 0 || remaining <= 0 || nonZero <= 0 {
 				continue
 			}
-			segW := int(float64(v) / float64(e.Total) * float64(totalBarW))
-			if segW < 2 {
-				segW = 2
+			var segW int
+			if nonZero == 1 {
+				segW = remaining
+			} else {
+				segW = int(float64(v) / float64(e.Total) * float64(totalBarW))
+				if segW < 2 {
+					segW = 2
+				}
+				if segW > remaining {
+					segW = remaining
+				}
 			}
 			bars += fmt.Sprintf(`<rect x="%d" y="%d" width="%d" height="%d" rx="2" fill="%s" class="bar"><title>%s: %d bytes</title></rect>`, bx, y, segW, barHeight, p.Color(), string(p), v)
 			bx += segW
+			remaining -= segW
+			nonZero--
 		}
 
-		bars += fmt.Sprintf(`<text x="%d" y="%d" class="pct-label">%.1f%%</text>`, bx+6, y+15, pct)
+		bars += fmt.Sprintf(`<text x="%d" y="%d" class="pct-label">%.1f%%</text>`, padLeft+totalBarW+6, y+15, pct)
 	}
 
 	// Platform legend
