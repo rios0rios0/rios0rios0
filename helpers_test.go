@@ -65,86 +65,66 @@ func TestFormatNumber(t *testing.T) {
 	})
 }
 
-func TestMergeContributions(t *testing.T) {
+func TestAggregateLanguagesByPlatform(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should return empty map when no maps are provided", func(t *testing.T) {
+	t.Run("should return empty map when no stats are provided", func(t *testing.T) {
 		// given
-		// no input maps
+		var named []NamedPlatformStats
 
 		// when
-		result := mergeContributions()
+		result := aggregateLanguagesByPlatform(named)
 
 		// then
 		assert.Empty(t, result)
 	})
 
-	t.Run("should return the same map when a single map is provided", func(t *testing.T) {
+	t.Run("should nest languages by platform from multiple sources", func(t *testing.T) {
 		// given
-		m := map[string]int{"2026-01-01": 5, "2026-01-02": 3}
+		named := []NamedPlatformStats{
+			{PlatformGitHub, &PlatformStats{Languages: map[string]int64{"Go": 50000, "Python": 30000}}},
+			{PlatformGitLab, &PlatformStats{Languages: map[string]int64{"Go": 20000, "Java": 10000}}},
+		}
 
 		// when
-		result := mergeContributions(m)
+		result := aggregateLanguagesByPlatform(named)
 
 		// then
-		assert.Equal(t, 5, result["2026-01-01"])
-		assert.Equal(t, 3, result["2026-01-02"])
-	})
-
-	t.Run("should sum values for overlapping keys across multiple maps", func(t *testing.T) {
-		// given
-		m1 := map[string]int{"2026-01-01": 5, "2026-01-02": 3}
-		m2 := map[string]int{"2026-01-01": 2, "2026-01-03": 7}
-		m3 := map[string]int{"2026-01-01": 1, "2026-01-02": 4}
-
-		// when
-		result := mergeContributions(m1, m2, m3)
-
-		// then
-		assert.Equal(t, 8, result["2026-01-01"])
-		assert.Equal(t, 7, result["2026-01-02"])
-		assert.Equal(t, 7, result["2026-01-03"])
+		assert.Equal(t, int64(50000), result["Go"][PlatformGitHub])
+		assert.Equal(t, int64(20000), result["Go"][PlatformGitLab])
+		assert.Equal(t, int64(30000), result["Python"][PlatformGitHub])
+		assert.Equal(t, int64(10000), result["Java"][PlatformGitLab])
 	})
 }
 
-func TestMergeLanguages(t *testing.T) {
+func TestAggregateContributionsByPlatform(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should return empty map when no maps are provided", func(t *testing.T) {
+	t.Run("should return empty map when no stats are provided", func(t *testing.T) {
 		// given
-		// no input maps
+		var named []NamedPlatformStats
 
 		// when
-		result := mergeLanguages()
+		result := aggregateContributionsByPlatform(named)
 
 		// then
 		assert.Empty(t, result)
 	})
 
-	t.Run("should return the same map when a single map is provided", func(t *testing.T) {
+	t.Run("should nest contributions by platform and date", func(t *testing.T) {
 		// given
-		m := map[string]int64{"Go": 50000, "Python": 30000}
+		named := []NamedPlatformStats{
+			{PlatformGitHub, &PlatformStats{DailyContributions: map[string]int{"2026-01-01": 5, "2026-01-02": 3}}},
+			{PlatformGitLab, &PlatformStats{DailyContributions: map[string]int{"2026-01-01": 2, "2026-01-03": 7}}},
+		}
 
 		// when
-		result := mergeLanguages(m)
+		result := aggregateContributionsByPlatform(named)
 
 		// then
-		assert.Equal(t, int64(50000), result["Go"])
-		assert.Equal(t, int64(30000), result["Python"])
-	})
-
-	t.Run("should sum bytes for overlapping languages across multiple maps", func(t *testing.T) {
-		// given
-		m1 := map[string]int64{"Go": 50000, "Python": 30000}
-		m2 := map[string]int64{"Go": 20000, "Java": 10000}
-		m3 := map[string]int64{"Python": 5000, "Java": 15000}
-
-		// when
-		result := mergeLanguages(m1, m2, m3)
-
-		// then
-		assert.Equal(t, int64(70000), result["Go"])
-		assert.Equal(t, int64(35000), result["Python"])
-		assert.Equal(t, int64(25000), result["Java"])
+		assert.Equal(t, 5, result["2026-01-01"][PlatformGitHub])
+		assert.Equal(t, 2, result["2026-01-01"][PlatformGitLab])
+		assert.Equal(t, 3, result["2026-01-02"][PlatformGitHub])
+		assert.Equal(t, 7, result["2026-01-03"][PlatformGitLab])
 	})
 }
