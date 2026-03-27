@@ -801,6 +801,9 @@ func renderLanguagesBarChart(languages map[string]int64) (string, error) {
 	for _, e := range entries {
 		total += e.Bytes
 	}
+	if total == 0 {
+		return "", fmt.Errorf("all language byte counts are zero")
+	}
 
 	width := 400
 	barHeight := 22

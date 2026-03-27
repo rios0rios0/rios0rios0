@@ -5,7 +5,6 @@ package main
 import (
 	"encoding/xml"
 	"io"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +12,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+const testCombinedStatsTemplate = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="175" viewBox="0 0 400 175" fill="none">
+<rect x="0.5" y="0.5" rx="4.5" height="99%%" width="399" fill="#151515"/>
+<text data-testid="commits">%[1]d</text>
+<text data-testid="prs">%[2]d</text>
+<text data-testid="issues">%[3]d</text>
+<text data-testid="contribs">%[4]d</text>
+</svg>`
 
 func assertValidSVGXML(t *testing.T, svgContent string) {
 	t.Helper()
@@ -30,16 +37,12 @@ func assertValidSVGXML(t *testing.T, svgContent string) {
 func TestRenderCombinedStatsSVG(t *testing.T) {
 	t.Parallel()
 
-	templateBytes, err := os.ReadFile("combined_stats.svg")
-	require.NoError(t, err, "combined_stats.svg template must exist")
-	template := string(templateBytes)
-
 	t.Run("should produce valid XML with known values", func(t *testing.T) {
 		// given
 		commits, prs, issues, contribs := 1234, 56, 78, 1368
 
 		// when
-		result := renderCombinedStatsSVG(template, commits, prs, issues, contribs)
+		result := renderCombinedStatsSVG(testCombinedStatsTemplate, commits, prs, issues, contribs)
 
 		// then
 		assertValidSVGXML(t, result)
@@ -50,7 +53,7 @@ func TestRenderCombinedStatsSVG(t *testing.T) {
 		commits, prs, issues, contribs := 5000, 120, 45, 5165
 
 		// when
-		result := renderCombinedStatsSVG(template, commits, prs, issues, contribs)
+		result := renderCombinedStatsSVG(testCombinedStatsTemplate, commits, prs, issues, contribs)
 
 		// then
 		assert.Contains(t, result, "5,000")
@@ -64,7 +67,7 @@ func TestRenderCombinedStatsSVG(t *testing.T) {
 		commits, prs, issues, contribs := 1, 2, 3, 4
 
 		// when
-		result := renderCombinedStatsSVG(template, commits, prs, issues, contribs)
+		result := renderCombinedStatsSVG(testCombinedStatsTemplate, commits, prs, issues, contribs)
 
 		// then
 		assert.Contains(t, result, `height="99%"`)
@@ -76,7 +79,7 @@ func TestRenderCombinedStatsSVG(t *testing.T) {
 		commits, prs, issues, contribs := 0, 0, 0, 0
 
 		// when
-		result := renderCombinedStatsSVG(template, commits, prs, issues, contribs)
+		result := renderCombinedStatsSVG(testCombinedStatsTemplate, commits, prs, issues, contribs)
 
 		// then
 		assertValidSVGXML(t, result)
@@ -153,6 +156,17 @@ func TestRenderLanguagesBarChart(t *testing.T) {
 	t.Run("should return error when languages map is empty", func(t *testing.T) {
 		// given
 		languages := map[string]int64{}
+
+		// when
+		_, err := renderLanguagesBarChart(languages)
+
+		// then
+		assert.Error(t, err)
+	})
+
+	t.Run("should return error when all language byte counts are zero", func(t *testing.T) {
+		// given
+		languages := map[string]int64{"Go": 0, "Python": 0}
 
 		// when
 		_, err := renderLanguagesBarChart(languages)
