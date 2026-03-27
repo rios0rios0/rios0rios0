@@ -32,43 +32,27 @@ func TestRenderCombinedStatsSVG(t *testing.T) {
 	t.Run("should produce valid XML with multi-platform stats", func(t *testing.T) {
 		// given
 		stats := []NamedPlatformStats{
-			{PlatformGitHub, &PlatformStats{TotalCommits: 1000, TotalPRsOrMRs: 50, TotalIssuesOrWIs: 30}},
-			{PlatformGitLab, &PlatformStats{TotalCommits: 200, TotalPRsOrMRs: 10, TotalIssuesOrWIs: 5}},
+			{PlatformGitHub, &PlatformStats{TotalCommits: 1000, TotalPRsOrMRs: 50, TotalIssuesOrWIs: 30, TotalRepos: 20, Languages: map[string]int64{"Go": 80000}, DailyContributions: map[string]int{"2026-03-25": 5}}},
+			{PlatformGitLab, &PlatformStats{TotalCommits: 200, TotalPRsOrMRs: 10, TotalIssuesOrWIs: 5, TotalRepos: 5, Languages: map[string]int64{"Python": 40000}, DailyContributions: map[string]int{"2026-03-26": 3}}},
 		}
 
 		// when
-		result := renderCombinedStatsSVG(stats, "")
+		result := renderCombinedStatsSVG(stats)
 
 		// then
 		assertValidSVGXML(t, result)
 		assert.Contains(t, result, `width="495"`)
 	})
 
-	t.Run("should produce valid XML with year tabs", func(t *testing.T) {
-		// given
-		stats := []NamedPlatformStats{
-			{PlatformGitHub, &PlatformStats{TotalCommits: 100, TotalPRsOrMRs: 10, TotalIssuesOrWIs: 5}},
-		}
-		tabs := renderYearTabs(2026, []int{2025, 2026})
-
-		// when
-		result := renderCombinedStatsSVG(stats, tabs)
-
-		// then
-		assertValidSVGXML(t, result)
-		assert.Contains(t, result, "2025")
-		assert.Contains(t, result, "2026")
-	})
-
 	t.Run("should contain platform colors in the output", func(t *testing.T) {
 		// given
 		stats := []NamedPlatformStats{
-			{PlatformGitHub, &PlatformStats{TotalCommits: 100, TotalPRsOrMRs: 10, TotalIssuesOrWIs: 5}},
-			{PlatformGitLab, &PlatformStats{TotalCommits: 50, TotalPRsOrMRs: 5, TotalIssuesOrWIs: 2}},
+			{PlatformGitHub, &PlatformStats{TotalCommits: 100, TotalPRsOrMRs: 10, TotalIssuesOrWIs: 5, TotalRepos: 3, Languages: map[string]int64{"Go": 4000}, DailyContributions: map[string]int{}}},
+			{PlatformGitLab, &PlatformStats{TotalCommits: 50, TotalPRsOrMRs: 5, TotalIssuesOrWIs: 2, TotalRepos: 2, Languages: map[string]int64{}, DailyContributions: map[string]int{}}},
 		}
 
 		// when
-		result := renderCombinedStatsSVG(stats, "")
+		result := renderCombinedStatsSVG(stats)
 
 		// then
 		assert.Contains(t, result, PlatformGitHub.Color())
@@ -78,14 +62,39 @@ func TestRenderCombinedStatsSVG(t *testing.T) {
 	t.Run("should produce valid XML with zero values", func(t *testing.T) {
 		// given
 		stats := []NamedPlatformStats{
-			{PlatformGitHub, &PlatformStats{TotalCommits: 0, TotalPRsOrMRs: 0, TotalIssuesOrWIs: 0}},
+			{PlatformGitHub, &PlatformStats{TotalCommits: 0, TotalPRsOrMRs: 0, TotalIssuesOrWIs: 0, TotalRepos: 0, Languages: map[string]int64{}, DailyContributions: map[string]int{}}},
 		}
 
 		// when
-		result := renderCombinedStatsSVG(stats, "")
+		result := renderCombinedStatsSVG(stats)
 
 		// then
 		assertValidSVGXML(t, result)
+	})
+
+	t.Run("should contain new stat rows for repos, lines of code, and streak", func(t *testing.T) {
+		// given
+		stats := []NamedPlatformStats{
+			{PlatformGitHub, &PlatformStats{
+				TotalCommits: 100, TotalPRsOrMRs: 10, TotalIssuesOrWIs: 5,
+				TotalRepos: 15,
+				Languages:  map[string]int64{"Go": 80000, "Python": 40000},
+				DailyContributions: map[string]int{
+					"2026-03-24": 3,
+					"2026-03-25": 5,
+					"2026-03-26": 2,
+				},
+			}},
+		}
+
+		// when
+		result := renderCombinedStatsSVG(stats)
+
+		// then
+		assertValidSVGXML(t, result)
+		assert.Contains(t, result, "Total Repositories")
+		assert.Contains(t, result, "Lines of Code")
+		assert.Contains(t, result, "Longest Streak (days)")
 	})
 }
 
@@ -168,7 +177,7 @@ func TestRenderLanguagesBarChart(t *testing.T) {
 		languages := map[string]map[PlatformName]int64{}
 
 		// when
-		_, err := renderLanguagesBarChart(languages, "")
+		_, err := renderLanguagesBarChart(languages)
 
 		// then
 		assert.Error(t, err)
@@ -182,7 +191,7 @@ func TestRenderLanguagesBarChart(t *testing.T) {
 		}
 
 		// when
-		_, err := renderLanguagesBarChart(languages, "")
+		_, err := renderLanguagesBarChart(languages)
 
 		// then
 		assert.Error(t, err)
@@ -197,7 +206,7 @@ func TestRenderLanguagesBarChart(t *testing.T) {
 		}
 
 		// when
-		result, err := renderLanguagesBarChart(languages, "")
+		result, err := renderLanguagesBarChart(languages)
 
 		// then
 		require.NoError(t, err)
@@ -210,7 +219,7 @@ func TestRenderLanguagesBarChart(t *testing.T) {
 		languages := map[string]map[PlatformName]int64{"Go": {PlatformGitHub: 100000}}
 
 		// when
-		result, err := renderLanguagesBarChart(languages, "")
+		result, err := renderLanguagesBarChart(languages)
 
 		// then
 		require.NoError(t, err)
@@ -232,7 +241,7 @@ func TestRenderContributionHeatmap(t *testing.T) {
 		}
 
 		// when
-		result := renderContributionHeatmap(contributions, startDate, endDate, "")
+		result := renderContributionHeatmap(contributions, startDate, endDate)
 
 		// then
 		assertValidSVGXML(t, result)
@@ -243,7 +252,7 @@ func TestRenderContributionHeatmap(t *testing.T) {
 		contributions := map[string]map[PlatformName]int{}
 
 		// when
-		result := renderContributionHeatmap(contributions, startDate, endDate, "")
+		result := renderContributionHeatmap(contributions, startDate, endDate)
 
 		// then
 		assertValidSVGXML(t, result)
@@ -256,7 +265,7 @@ func TestRenderContributionHeatmap(t *testing.T) {
 		}
 
 		// when
-		result := renderContributionHeatmap(contributions, startDate, endDate, "")
+		result := renderContributionHeatmap(contributions, startDate, endDate)
 
 		// then
 		assert.Contains(t, result, "2026-03-25: 7 (GitHub: 3, GitLab: 4)")
@@ -269,7 +278,7 @@ func TestRenderContributionHeatmap(t *testing.T) {
 		}
 
 		// when
-		result := renderContributionHeatmap(contributions, startDate, endDate, "")
+		result := renderContributionHeatmap(contributions, startDate, endDate)
 
 		// then
 		ghGlScale := comboColorScale(comboGitHub | comboGitLab)
@@ -291,7 +300,7 @@ func TestRenderContributionHeatmap(t *testing.T) {
 		}
 
 		// when
-		result := renderContributionHeatmap(contributions, startDate, endDate, "")
+		result := renderContributionHeatmap(contributions, startDate, endDate)
 
 		// then
 		assert.Contains(t, result, "GitHub + GitLab")
@@ -303,70 +312,13 @@ func TestRenderContributionHeatmap(t *testing.T) {
 		contributions := map[string]map[PlatformName]int{}
 
 		// when
-		result := renderContributionHeatmap(contributions, startDate, endDate, "")
+		result := renderContributionHeatmap(contributions, startDate, endDate)
 
 		// then
 		assert.Contains(t, result, "Jan")
 		assert.Contains(t, result, "Mon")
 		assert.Contains(t, result, "Wed")
 		assert.Contains(t, result, "Fri")
-	})
-
-	t.Run("should produce valid XML with year tabs", func(t *testing.T) {
-		// given
-		contributions := map[string]map[PlatformName]int{
-			"2026-03-25": {PlatformGitHub: 5},
-		}
-		tabs := renderYearTabs(2026, []int{2025, 2026})
-
-		// when
-		result := renderContributionHeatmap(contributions, startDate, endDate, tabs)
-
-		// then
-		assertValidSVGXML(t, result)
-		assert.Contains(t, result, "2025")
-		assert.Contains(t, result, "2026")
-	})
-}
-
-func TestRenderYearTabs(t *testing.T) {
-	t.Parallel()
-
-	t.Run("should highlight the active year with filled background", func(t *testing.T) {
-		// given
-		years := []int{2025, 2026}
-
-		// when
-		result := renderYearTabs(2026, years)
-
-		// then
-		assert.Contains(t, result, `class="year-tab active"`)
-		assert.Contains(t, result, `fill="#30363d"`)
-		assert.Contains(t, result, "2026")
-		assert.Contains(t, result, "2025")
-	})
-
-	t.Run("should show background rect for inactive tabs", func(t *testing.T) {
-		// given
-		years := []int{2025, 2026}
-
-		// when
-		result := renderYearTabs(2026, years)
-
-		// then
-		assert.Contains(t, result, `fill="#1c2128"`)
-	})
-
-	t.Run("should handle single year", func(t *testing.T) {
-		// given
-		years := []int{2026}
-
-		// when
-		result := renderYearTabs(2026, years)
-
-		// then
-		assert.Contains(t, result, "2026")
-		assert.Contains(t, result, `class="year-tab active"`)
 	})
 }
 
