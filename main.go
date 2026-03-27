@@ -47,7 +47,7 @@ var platformOrder = []PlatformName{PlatformGitHub, PlatformGitLab, PlatformAzure
 func (p PlatformName) Color() string {
 	switch p {
 	case PlatformGitHub:
-		return "#8b949e"
+		return "#238636"
 	case PlatformGitLab:
 		return "#e24329"
 	case PlatformAzureDevOps:
@@ -60,7 +60,7 @@ func (p PlatformName) Color() string {
 func (p PlatformName) ColorScale() [4]string {
 	switch p {
 	case PlatformGitHub:
-		return [4]string{"#2a2f35", "#5a6068", "#6f777f", "#8b949e"}
+		return [4]string{"#0e4429", "#006d32", "#26a641", "#39d353"}
 	case PlatformGitLab:
 		return [4]string{"#4d1a10", "#b03820", "#d63e2a", "#e24329"}
 	case PlatformAzureDevOps:
@@ -93,13 +93,13 @@ func platformToCombo(p PlatformName) PlatformCombo {
 }
 
 var comboColorScales = map[PlatformCombo][4]string{
-	comboGitHub:                        {"#2a2f35", "#5a6068", "#6f777f", "#8b949e"},
+	comboGitHub:                        {"#0e4429", "#006d32", "#26a641", "#39d353"},
 	comboGitLab:                        {"#4d1a10", "#b03820", "#d63e2a", "#e24329"},
 	comboAzureDevOps:                   {"#0a2d4d", "#0053a0", "#0066c0", "#0078d4"},
-	comboGitHub | comboGitLab:          {"#2d1a2e", "#7a3068", "#a0407a", "#c44a8c"},
-	comboGitHub | comboAzureDevOps:     {"#0a2d2d", "#1a6060", "#2a8080", "#3aadad"},
+	comboGitHub | comboGitLab:          {"#2a2a10", "#5a5520", "#7a7530", "#a09540"},
+	comboGitHub | comboAzureDevOps:     {"#0a3040", "#106a60", "#1a9070", "#24b880"},
 	comboGitLab | comboAzureDevOps:     {"#2a1050", "#5a2090", "#7030b0", "#8840d0"},
-	comboGitHub | comboGitLab | comboAzureDevOps: {"#3d3010", "#8a7020", "#bda030", "#e8c840"},
+	comboGitHub | comboGitLab | comboAzureDevOps: {"#2a3018", "#5a6830", "#7a9040", "#a0c050"},
 }
 
 var comboLabels = map[PlatformCombo]string{
@@ -1725,8 +1725,15 @@ func main() {
 		// Languages
 		langsByPlatform := aggregateLanguagesByPlatform(stats)
 		if err := GenerateLanguagesBarChart(langsByPlatform, filepath.Join(outputDir, "top_languages"+suffix)); err != nil {
-			fmt.Printf("Error generating languages chart for %d: %v\n", year, err)
-			hadErrors = true
+			errMsg := err.Error()
+			if strings.Contains(errMsg, "no language data") || strings.Contains(errMsg, "all language byte counts are zero") {
+				// Expected "no data" condition: warn and continue without marking a hard error.
+				fmt.Printf("Warning: skipping languages chart for %d: %v\n", year, err)
+			} else {
+				// Unexpected failure (e.g., file I/O, template, logic): treat as an error.
+				fmt.Printf("Error generating languages chart for %d: %v\n", year, err)
+				hadErrors = true
+			}
 		}
 
 		// Contribution heatmap
