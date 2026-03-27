@@ -56,7 +56,7 @@ Single-package monolith (`package main` in `main.go`). Key components:
   - `renderContributionHeatmap(contribs, startDate, endDate, yearTabs)` -- heatmap with date range
 - **`main()` flow**: Load history -> fetch platforms -> save snapshot -> accumulate by year -> generate per-year SVGs -> copy current year to `_final.svg` -> generate tokens graph
 
-Platform colors: GitHub `#8b949e`, GitLab `#e24329`, Azure DevOps `#0078d4`. Unified card chrome: `rx="4.5"`, `fill="#151515"`, `stroke="#e4e2e2"`, `stroke-opacity="0.2"`.
+Platform colors: GitHub `#238636`, GitLab `#e24329`, Azure DevOps `#0078d4`. Unified card chrome: `rx="4.5"`, `fill="#151515"`, `stroke="#e4e2e2"`, `stroke-opacity="0.2"`.
 
 ## Testing
 
