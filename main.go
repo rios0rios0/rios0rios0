@@ -195,7 +195,7 @@ func addSnapshot(history *StatsHistory, date string, platforms []NamedPlatformSt
 }
 
 func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
-	// Collect per-year, per-platform: max totals, merged contributions (max per date), latest languages
+	// Collect per-year, per-platform: max totals, merged contributions (max per date), merged languages (max bytes per language)
 	type accumEntry struct {
 		maxCommits    int
 		maxPRs        int
@@ -624,7 +624,10 @@ func fetchGitLabLanguages(client *http.Client, userID int, accessToken string, s
 			stats.TotalRepos++
 
 			// Skip projects not active since the cutoff date
-			lastActivity, err := time.Parse(time.RFC3339, proj.LastActivityAt)
+			lastActivity, err := time.Parse(time.RFC3339Nano, proj.LastActivityAt)
+			if err != nil {
+				lastActivity, err = time.Parse(time.RFC3339, proj.LastActivityAt)
+			}
 			if err != nil || lastActivity.Before(since) {
 				continue
 			}
@@ -900,7 +903,7 @@ func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, er
 		}
 	}
 
-	// Fetch languages from repos with recent commits
+	// Fetch languages from Azure DevOps repositories
 	fetchAzureDevOpsLanguages(newRequest, doRequest, organization, projects, stats)
 
 	// Count work items
@@ -982,38 +985,62 @@ func fetchAzureDevOpsLanguages(
 				continue
 			}
 
-			// Fetch the file tree from the default branch
-			itemsURL := fmt.Sprintf(
-				"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/items?recursionLevel=Full&api-version=7.0",
+			// Strip refs/heads/ prefix for the versionDescriptor parameter
+			branch := strings.TrimPrefix(repo.DefaultBranch, "refs/heads/")
+
+			// Fetch the file tree from the default branch with pagination
+			baseItemsURL := fmt.Sprintf(
+				"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/items?recursionLevel=Full&versionDescriptor.version=%s&versionDescriptor.versionType=branch&api-version=7.0",
 				url.PathEscape(organization), url.PathEscape(proj.ID), url.PathEscape(repo.ID),
+				url.QueryEscape(branch),
 			)
-			req, err := newRequest("GET", itemsURL, nil)
-			if err != nil {
-				continue
-			}
 
-			body, statusCode, err := doRequest(req)
-			if err != nil || statusCode != http.StatusOK {
-				continue
-			}
-
-			var itemsResult struct {
-				Value []struct {
-					Path   string `json:"path"`
-					IsFolder bool  `json:"isFolder"`
-				} `json:"value"`
-			}
-			if err = json.Unmarshal(body, &itemsResult); err != nil {
-				continue
-			}
-
-			for _, item := range itemsResult.Value {
-				if item.IsFolder {
-					continue
+			continuationToken := ""
+			for {
+				itemsURL := baseItemsURL
+				if continuationToken != "" {
+					itemsURL += "&continuationToken=" + url.QueryEscape(continuationToken)
 				}
-				ext := strings.ToLower(filepath.Ext(item.Path))
-				if lang, ok := extensionToLanguage[ext]; ok {
-					stats.Languages[lang]++
+
+				req, err := newRequest("GET", itemsURL, nil)
+				if err != nil {
+					break
+				}
+
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					break
+				}
+
+				body, err := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if err != nil || resp.StatusCode != http.StatusOK {
+					break
+				}
+
+				var itemsResult struct {
+					Value []struct {
+						Path     string `json:"path"`
+						IsFolder bool   `json:"isFolder"`
+					} `json:"value"`
+				}
+				if err = json.Unmarshal(body, &itemsResult); err != nil {
+					break
+				}
+
+				for _, item := range itemsResult.Value {
+					if item.IsFolder {
+						continue
+					}
+					ext := strings.ToLower(filepath.Ext(item.Path))
+					if lang, ok := extensionToLanguage[ext]; ok {
+						stats.Languages[lang]++
+					}
+				}
+
+				continuationToken = resp.Header.Get("x-ms-continuationtoken")
+				if continuationToken == "" {
+					break
 				}
 			}
 		}
@@ -1088,13 +1115,14 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 			mergedContribs[date] += count
 		}
 	}
-	// Estimate LoC only from platforms with real byte counts (GitHub, Azure DevOps).
+	// Estimate LoC only from platforms with real byte counts (GitHub only).
 	// GitLab stores language percentages scaled by 100, not actual bytes.
+	// Azure DevOps stores file counts, not bytes.
 	const bytesPerLine = 40
 	var realBytes int64
 	locVals := make(map[PlatformName]int64)
 	for _, ns := range platformStats {
-		if ns.Platform == PlatformGitLab {
+		if ns.Platform == PlatformGitLab || ns.Platform == PlatformAzureDevOps {
 			continue
 		}
 		var platBytes int64
@@ -1250,9 +1278,13 @@ func renderTokensHeatmap(tokens []TokenUsage) (string, error) {
 		endDate = maxDate
 	}
 
-	// Align start to Sunday
-	for startDate.Weekday() != time.Sunday {
-		startDate = startDate.AddDate(0, 0, -1)
+	// For a calendar-year view (Jan 1 start), do not rewind to the previous
+	// Sunday as that would include days from the previous year.
+	isCalendarYear := startDate.Day() == 1 && startDate.Month() == time.January
+	if !isCalendarYear {
+		for startDate.Weekday() != time.Sunday {
+			startDate = startDate.AddDate(0, 0, -1)
+		}
 	}
 
 	// Find max tokens for scaling
