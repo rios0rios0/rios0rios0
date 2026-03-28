@@ -1632,7 +1632,7 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 			}
 		}
 		if total == 0 {
-			return "#21262d", 0
+			return "#161b22", 0
 		}
 		activeCombos[combo] = true
 
