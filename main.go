@@ -1210,12 +1210,54 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 		}
 	}
 
+	// Active days (unique days with contributions)
+	activeDays := len(mergedContribs)
+	activeDayVals := make(map[PlatformName]int64)
+	for _, ns := range platformStats {
+		count := 0
+		for _, c := range ns.Stats.DailyContributions {
+			if c > 0 {
+				count++
+			}
+		}
+		if count > 0 {
+			activeDayVals[ns.Platform] = int64(count)
+		}
+	}
+
+	// Average daily contributions
+	avgDaily := 0
+	if activeDays > 0 {
+		totalContribCount := 0
+		for _, c := range mergedContribs {
+			totalContribCount += c
+		}
+		avgDaily = totalContribCount / activeDays
+	}
+	avgDailyVals := make(map[PlatformName]int64)
+	for _, ns := range platformStats {
+		platDays := 0
+		platTotal := 0
+		for _, c := range ns.Stats.DailyContributions {
+			if c > 0 {
+				platDays++
+				platTotal += c
+			}
+		}
+		if platDays > 0 {
+			avgDailyVals[ns.Platform] = int64(platTotal / platDays)
+		}
+	}
+
 	iconCommits := `<path fill-rule="evenodd" d="M1.643 3.143L.427 1.927A.25.25 0 000 2.104V5.75c0 .138.112.25.25.25h3.646a.25.25 0 00.177-.427L2.715 4.215a6.5 6.5 0 11-1.18 4.458.75.75 0 10-1.493.154 8.001 8.001 0 101.6-5.684zM7.75 4a.75.75 0 01.75.75v2.992l2.028.812a.75.75 0 01-.557 1.392l-2.5-1A.75.75 0 017 8.25v-3.5A.75.75 0 017.75 4z"/>`
 	iconPRs := `<path fill-rule="evenodd" d="M7.177 3.073L9.573.677A.25.25 0 0110 .854v4.792a.25.25 0 01-.427.177L7.177 3.427a.25.25 0 010-.354zM3.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122v5.256a2.251 2.251 0 11-1.5 0V5.372A2.25 2.25 0 011.5 3.25zM11 2.5h-1V4h1a1 1 0 011 1v5.628a2.251 2.251 0 101.5 0V5A2.5 2.5 0 0011 2.5zm1 10.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0zM3.75 12a.75.75 0 100 1.5.75.75 0 000-1.5z"/>`
 	iconIssues := `<path fill-rule="evenodd" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm9 3a1 1 0 11-2 0 1 1 0 012 0zm-.25-6.25a.75.75 0 00-1.5 0v3.5a.75.75 0 001.5 0v-3.5z"/>`
 	iconRepos := `<path fill-rule="evenodd" d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-1 1v.17a2.5 2.5 0 01-.286-.958A2.495 2.495 0 012 11.5v-9zm10.5-1h-8a1 1 0 00-1 1v6.708A2.486 2.486 0 014.5 9h8V1.5z"/>`
 	iconCode := `<path fill-rule="evenodd" d="M4.72 3.22a.75.75 0 011.06 1.06L2.06 8l3.72 3.72a.75.75 0 11-1.06 1.06L.47 8.53a.75.75 0 010-1.06l4.25-4.25zm6.56 0a.75.75 0 10-1.06 1.06L13.94 8l-3.72 3.72a.75.75 0 101.06 1.06l4.25-4.25a.75.75 0 000-1.06l-4.25-4.25z"/>`
 	iconStreak := `<path fill-rule="evenodd" d="M7.998.002C5.026.002 2.975 2.1 2.31 3.548c-.333.723-.522 1.477-.522 2.087 0 1.236.755 2.26 1.756 2.943.39.267.833.49 1.272.658-.122.1-.242.21-.355.33A3.51 3.51 0 003.5 11.5a3.5 3.5 0 007 0c0-.96-.39-1.83-1.02-2.46a5.844 5.844 0 00-.397-.37c.466-.182.937-.425 1.346-.71C11.4 7.233 12.13 6.201 12.13 4.97c0-.61-.19-1.364-.522-2.087C10.942 1.434 8.888-.664 7.998.002zM7.5 12a2 2 0 01-2-2c0-.537.12-.976.373-1.393.247-.408.622-.786 1.127-1.107.505.32.88.699 1.127 1.107.254.417.373.856.373 1.393a2 2 0 01-2 2z"/>`
+
+	iconCalendar := `<path fill-rule="evenodd" d="M4.75 0a.75.75 0 01.75.75V2h5V.75a.75.75 0 011.5 0V2h1.25c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0113.25 16H2.75A1.75 1.75 0 011 14.25V3.75C1 2.784 1.784 2 2.75 2H4V.75A.75.75 0 014.75 0zm0 3.5h8.5a.25.25 0 01.25.25V6h-11V3.75a.25.25 0 01.25-.25h2zm-2.25 4v6.75c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25V7.5h-11z"/>`
+	iconAvg := `<path fill-rule="evenodd" d="M1.5 1.75a.75.75 0 00-1.5 0v12.5c0 .414.336.75.75.75h14.5a.75.75 0 000-1.5H1.5V1.75zm14.28 2.53a.75.75 0 00-1.06-1.06L10 7.94 7.53 5.47a.75.75 0 00-1.06 0L3.22 8.72a.75.75 0 001.06 1.06L7 7.06l2.47 2.47a.75.75 0 001.06 0l5.25-5.25z"/>`
 
 	rows := []statRow{
 		{"Total Commits", iconCommits, commitVals, totalCommits},
@@ -1224,15 +1266,17 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 		{"Total Repositories", iconRepos, repoVals, totalRepos},
 		{"Lines of Code", iconCode, locVals, linesOfCode},
 		{"Longest Streak (days)", iconStreak, streakVals, streak},
+		{"Active Days", iconCalendar, activeDayVals, activeDays},
+		{"Avg Daily Contributions", iconAvg, avgDailyVals, avgDaily},
 	}
 
-	barAreaX := 260
-	barAreaW := 140
-	valueX := 455
+	barAreaX := 250
+	barAreaW := 130
+	valueX := 445
 
 	var body string
 	for i, row := range rows {
-		yOffset := i * 30
+		yOffset := i * 28
 		delay := 450 + i*150
 
 		// Icon
@@ -1288,7 +1332,7 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 	svgHeight := 350
 	titleY := 35
 	bodyY := 55
-	legendY := 280
+	legendY := 330
 
 	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="495" height="%d" viewBox="0 0 495 %d" fill="none" role="img">
 <title>Combined Stats</title>
@@ -1578,7 +1622,7 @@ func renderLanguagesBarChart(languages map[string]map[PlatformName]int64) (strin
 	}
 
 	// Platform legend
-	legendY := padTop + len(entries)*(barHeight+barGap) + 5
+	legendY := 330
 	var legend string
 	dx := padLeft
 	for _, p := range platformOrder {
