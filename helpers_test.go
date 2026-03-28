@@ -185,6 +185,7 @@ func TestAggregateLanguagesByPlatform(t *testing.T) {
 		result := aggregateLanguagesByPlatform(named)
 
 		// then
+		// Both platforms have Go as 100% of their total, so both normalize to 10000
 		assert.Equal(t, int64(10000), result["Go"][PlatformGitHub])
 		assert.Equal(t, int64(10000), result["Go"][PlatformAzureDevOps])
 	})
