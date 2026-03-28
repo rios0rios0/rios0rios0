@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -299,9 +300,9 @@ func FetchGitHubStats(username, token string) (*PlatformStats, error) {
 		DailyContributions: make(map[string]int),
 	}
 
-	// Use GraphQL API for contributions
+	// Use GraphQL API for contributions + repos committed to
 	query := fmt.Sprintf(`{
-		"query": "query { user(login: \"%s\") { contributionsCollection { totalCommitContributions totalPullRequestContributions totalIssueContributions contributionCalendar { weeks { contributionDays { date contributionCount } } } } } }"
+		"query": "query { user(login: \"%s\") { contributionsCollection { totalCommitContributions totalPullRequestContributions totalIssueContributions contributionCalendar { weeks { contributionDays { date contributionCount } } } commitContributionsByRepository(maxRepositories: 100) { contributions { totalCount } repository { name owner { login } isPrivate } } } repositories(first: 100, ownerAffiliations: OWNER, isFork: false, privacy: PUBLIC) { totalCount } } }"
 	}`, username)
 
 	req, err := http.NewRequest("POST", "https://api.github.com/graphql", strings.NewReader(query))
@@ -342,7 +343,22 @@ func FetchGitHubStats(username, token string) (*PlatformStats, error) {
 							} `json:"contributionDays"`
 						} `json:"weeks"`
 					} `json:"contributionCalendar"`
+					CommitContributionsByRepository []struct {
+						Contributions struct {
+							TotalCount int `json:"totalCount"`
+						} `json:"contributions"`
+						Repository struct {
+							Name      string `json:"name"`
+							IsPrivate bool   `json:"isPrivate"`
+							Owner     struct {
+								Login string `json:"login"`
+							} `json:"owner"`
+						} `json:"repository"`
+					} `json:"commitContributionsByRepository"`
 				} `json:"contributionsCollection"`
+				Repositories struct {
+					TotalCount int `json:"totalCount"`
+				} `json:"repositories"`
 			} `json:"user"`
 		} `json:"data"`
 	}
@@ -355,6 +371,7 @@ func FetchGitHubStats(username, token string) (*PlatformStats, error) {
 	stats.TotalCommits = cc.TotalCommitContributions
 	stats.TotalPRsOrMRs = cc.TotalPullRequestContributions
 	stats.TotalIssuesOrWIs = cc.TotalIssueContributions
+	stats.TotalRepos = gqlResp.Data.User.Repositories.TotalCount
 
 	for _, week := range cc.ContributionCalendar.Weeks {
 		for _, day := range week.ContributionDays {
@@ -364,97 +381,90 @@ func FetchGitHubStats(username, token string) (*PlatformStats, error) {
 		}
 	}
 
-	// Fetch languages only from repos pushed in the last year
-	oneYearAgo := time.Now().AddDate(-1, 0, 0)
-	if err = fetchGitHubLanguages(client, username, token, oneYearAgo, stats); err != nil {
+	// Fetch languages weighted by commit activity in the contribution period.
+	// commitContributionsByRepository gives repos the user actually committed to,
+	// so we weight each repo's language bytes by its share of total commits.
+	var repoContribs []repoContribution
+	for _, rc := range cc.CommitContributionsByRepository {
+		if rc.Repository.IsPrivate {
+			continue
+		}
+		var entry repoContribution
+		entry.Contributions.TotalCount = rc.Contributions.TotalCount
+		entry.Repository.Name = rc.Repository.Name
+		entry.Repository.Owner.Login = rc.Repository.Owner.Login
+		repoContribs = append(repoContribs, entry)
+	}
+	if err = fetchGitHubLanguages(client, username, token, repoContribs, stats); err != nil {
 		fmt.Printf("Warning: could not fetch GitHub languages: %v\n", err)
 	}
 
 	return stats, nil
 }
 
-func fetchGitHubLanguages(client *http.Client, username, token string, since time.Time, stats *PlatformStats) error {
-	page := 1
-	for {
-		reposURL := fmt.Sprintf("https://api.github.com/users/%s/repos?per_page=100&page=%d&type=owner&sort=pushed&direction=desc", username, page)
-		req, err := http.NewRequest("GET", reposURL, nil)
+type repoContribution struct {
+	Contributions struct {
+		TotalCount int `json:"totalCount"`
+	} `json:"contributions"`
+	Repository struct {
+		Name  string `json:"name"`
+		Owner struct {
+			Login string `json:"login"`
+		} `json:"owner"`
+	} `json:"repository"`
+}
+
+func fetchGitHubLanguages(client *http.Client, username, token string, repoContribs []repoContribution, stats *PlatformStats) error {
+	// Calculate total commits across all contributed repos for weighting
+	totalCommits := 0
+	for _, rc := range repoContribs {
+		totalCommits += rc.Contributions.TotalCount
+	}
+	if totalCommits == 0 {
+		return nil
+	}
+
+	successCount := 0
+	for _, rc := range repoContribs {
+		owner := rc.Repository.Owner.Login
+		name := rc.Repository.Name
+		commits := rc.Contributions.TotalCount
+		weight := float64(commits) / float64(totalCommits)
+
+		langURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/languages", owner, name)
+		langReq, err := http.NewRequest("GET", langURL, nil)
 		if err != nil {
-			return err
+			continue
 		}
-		req.Header.Set("Authorization", "Bearer "+token)
+		langReq.Header.Set("Authorization", "Bearer "+token)
 
-		resp, err := client.Do(req)
+		langResp, err := client.Do(langReq)
 		if err != nil {
-			return err
+			continue
 		}
-
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		langBody, err := io.ReadAll(langResp.Body)
+		langResp.Body.Close()
 		if err != nil {
-			return err
+			continue
+		}
+		if langResp.StatusCode != http.StatusOK {
+			continue
 		}
 
-		var repos []struct {
-			Name     string `json:"name"`
-			Fork     bool   `json:"fork"`
-			Language string `json:"language"`
-			PushedAt string `json:"pushed_at"`
-		}
-		if err = json.Unmarshal(body, &repos); err != nil {
-			return err
+		var langs map[string]int64
+		if err = json.Unmarshal(langBody, &langs); err != nil {
+			continue
 		}
 
-		if len(repos) == 0 {
-			break
+		// Weight language bytes by the repo's share of total commits
+		for lang, byteCount := range langs {
+			stats.Languages[lang] += int64(math.Round(float64(byteCount) * weight))
 		}
-
-		allTooOld := true
-		for _, repo := range repos {
-			if repo.Fork {
-				continue
-			}
-			stats.TotalRepos++
-
-			// Skip repos not pushed since the cutoff date
-			pushedAt, err := time.Parse(time.RFC3339, repo.PushedAt)
-			if err != nil || pushedAt.Before(since) {
-				continue
-			}
-			allTooOld = false
-			langURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/languages", username, repo.Name)
-			langReq, err := http.NewRequest("GET", langURL, nil)
-			if err != nil {
-				continue
-			}
-			langReq.Header.Set("Authorization", "Bearer "+token)
-
-			langResp, err := client.Do(langReq)
-			if err != nil {
-				continue
-			}
-			langBody, err := io.ReadAll(langResp.Body)
-			langResp.Body.Close()
-			if err != nil {
-				continue
-			}
-
-			var langs map[string]int64
-			if err = json.Unmarshal(langBody, &langs); err != nil {
-				continue
-			}
-			for lang, byteCount := range langs {
-				stats.Languages[lang] += byteCount
-			}
-		}
-
-		// Repos are sorted by pushed desc; if all on this page are too old, stop
-		if allTooOld {
-			break
-		}
-		if len(repos) < 100 {
-			break
-		}
-		page++
+		successCount++
+		stats.TotalRepos++
+	}
+	if successCount == 0 && len(repoContribs) > 0 {
+		return fmt.Errorf("all %d language requests failed", len(repoContribs))
 	}
 	return nil
 }
@@ -786,6 +796,9 @@ func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, er
 		}
 	}
 
+	// Track repos the user committed to for language detection
+	var activeRepos []adoRepoRef
+
 	for _, proj := range projects {
 		// Get repos
 		reposURL := fmt.Sprintf("https://dev.azure.com/%s/%s/_apis/git/repositories?api-version=7.0",
@@ -813,6 +826,7 @@ func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, er
 
 		// Count commits with dates
 		for _, repo := range reposResult.Value {
+			repoHadCommits := false
 			skip := 0
 			for {
 				commitsURL := fmt.Sprintf(
@@ -843,6 +857,9 @@ func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, er
 				}
 
 				stats.TotalCommits += commitsResult.Count
+				if commitsResult.Count > 0 {
+					repoHadCommits = true
+				}
 				for _, commit := range commitsResult.Value {
 					if len(commit.Author.Date) >= 10 {
 						date := commit.Author.Date[:10]
@@ -854,6 +871,9 @@ func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, er
 					break
 				}
 				skip += 100
+			}
+			if repoHadCommits {
+				activeRepos = append(activeRepos, adoRepoRef{ProjectID: proj.ID, RepoID: repo.ID})
 			}
 		}
 
@@ -903,8 +923,8 @@ func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, er
 		}
 	}
 
-	// Fetch languages from Azure DevOps repositories
-	fetchAzureDevOpsLanguages(newRequest, doRequest, organization, projects, stats)
+	// Fetch languages only from repos the user committed to
+	fetchAzureDevOpsLanguages(newRequest, doRequest, organization, activeRepos, stats)
 
 	// Count work items
 	wiqlURL := fmt.Sprintf("https://dev.azure.com/%s/_apis/wit/wiql?$top=20000&api-version=7.0", url.PathEscape(organization))
@@ -949,18 +969,23 @@ var extensionToLanguage = map[string]string{
 	".groovy": "Groovy", ".gradle": "Groovy", ".pl": "Perl",
 }
 
+type adoRepoRef struct {
+	ProjectID string
+	RepoID    string
+}
+
 func fetchAzureDevOpsLanguages(
 	newRequest func(string, string, io.Reader) (*http.Request, error),
 	doRequest func(*http.Request) ([]byte, int, error),
 	organization string,
-	projects []adoProject,
+	activeRepos []adoRepoRef,
 	stats *PlatformStats,
 ) {
-	for _, proj := range projects {
-		// Get repos for this project
-		reposURL := fmt.Sprintf("https://dev.azure.com/%s/%s/_apis/git/repositories?api-version=7.0",
-			url.PathEscape(organization), url.PathEscape(proj.ID))
-		req, err := newRequest("GET", reposURL, nil)
+	for _, ref := range activeRepos {
+		// Get repo metadata for default branch
+		repoURL := fmt.Sprintf("https://dev.azure.com/%s/%s/_apis/git/repositories/%s?api-version=7.0",
+			url.PathEscape(organization), url.PathEscape(ref.ProjectID), url.PathEscape(ref.RepoID))
+		req, err := newRequest("GET", repoURL, nil)
 		if err != nil {
 			continue
 		}
@@ -970,30 +995,22 @@ func fetchAzureDevOpsLanguages(
 			continue
 		}
 
-		var reposResult struct {
-			Value []struct {
-				ID            string `json:"id"`
-				DefaultBranch string `json:"defaultBranch"`
-			} `json:"value"`
+		var repoMeta struct {
+			DefaultBranch string `json:"defaultBranch"`
 		}
-		if err = json.Unmarshal(body, &reposResult); err != nil {
+		if err = json.Unmarshal(body, &repoMeta); err != nil || repoMeta.DefaultBranch == "" {
 			continue
 		}
 
-		for _, repo := range reposResult.Value {
-			if repo.DefaultBranch == "" {
-				continue
-			}
+		// Strip refs/heads/ prefix for the versionDescriptor parameter
+		branch := strings.TrimPrefix(repoMeta.DefaultBranch, "refs/heads/")
 
-			// Strip refs/heads/ prefix for the versionDescriptor parameter
-			branch := strings.TrimPrefix(repo.DefaultBranch, "refs/heads/")
-
-			// Fetch the file tree from the default branch with pagination
-			baseItemsURL := fmt.Sprintf(
-				"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/items?recursionLevel=Full&versionDescriptor.version=%s&versionDescriptor.versionType=branch&api-version=7.0",
-				url.PathEscape(organization), url.PathEscape(proj.ID), url.PathEscape(repo.ID),
-				url.QueryEscape(branch),
-			)
+		// Fetch the file tree from the default branch with pagination
+		baseItemsURL := fmt.Sprintf(
+			"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/items?recursionLevel=Full&versionDescriptor.version=%s&versionDescriptor.versionType=branch&api-version=7.0",
+			url.PathEscape(organization), url.PathEscape(ref.ProjectID), url.PathEscape(ref.RepoID),
+			url.QueryEscape(branch),
+		)
 
 			continuationToken := ""
 			for {
@@ -1043,7 +1060,6 @@ func fetchAzureDevOpsLanguages(
 					break
 				}
 			}
-		}
 	}
 }
 
