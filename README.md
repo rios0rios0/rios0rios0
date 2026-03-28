@@ -1,6 +1,6 @@
 <table width="100%"><tr>
-<td width="50%"><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_final.svg" width="100%" alt="combined stats" /></td>
-<td width="50%"><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/top_languages_final.svg" width="100%" alt="top languages" /></td>
+	<td width="50%"><picture><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_final.svg" width="100%" alt="combined stats" /></picture></td>
+	<td width="50%"><picture><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/top_languages_final.svg" width="100%" alt="top languages" /></picture></td>
 </tr></table>
 
 <div align="center">
