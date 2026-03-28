@@ -1,7 +1,7 @@
-<div align="center">
-  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_final.svg" width="49%" alt="combined stats" />
-  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/top_languages_final.svg" width="50%" alt="top languages" />
-</div>
+<table width="100%"><tr>
+<td width="50%"><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_final.svg" width="100%" alt="combined stats" /></td>
+<td width="50%"><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/top_languages_final.svg" width="100%" alt="top languages" /></td>
+</tr></table>
 
 <div align="center">
   <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/claude_tokens_final.svg" alt="claude code tokens heatmap" />

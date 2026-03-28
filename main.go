@@ -1227,8 +1227,8 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 	}
 
 	barAreaX := 260
-	barAreaW := 150
-	valueX := 465
+	barAreaW := 140
+	valueX := 455
 
 	var body string
 	for i, row := range rows {
@@ -1283,7 +1283,7 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 		body += `</g>`
 	}
 
-	legend := renderPlatformLegend(25, 0, platformStats)
+	legend := renderPlatformLegend(25, 0)
 
 	svgHeight := 350
 	titleY := 35
@@ -1411,7 +1411,7 @@ func renderTokensHeatmap(tokens []TokenUsage) (string, error) {
 	for i, label := range dayLabels {
 		if label != "" {
 			y := padTop + i*(cellSize+cellGap) + cellSize - 2
-			cells += fmt.Sprintf(`<text x="2" y="%d" class="day-label">%s</text>`, y, label)
+			cells += fmt.Sprintf(`<text x="8" y="%d" class="day-label">%s</text>`, y, label)
 		}
 	}
 
@@ -1690,7 +1690,7 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 	for i, label := range dayLabels {
 		if label != "" {
 			y := padTop + i*(cellSize+cellGap) + cellSize - 2
-			cells += fmt.Sprintf(`<text x="2" y="%d" class="day-label">%s</text>`, y, label)
+			cells += fmt.Sprintf(`<text x="8" y="%d" class="day-label">%s</text>`, y, label)
 		}
 	}
 
@@ -1823,19 +1823,13 @@ func aggregateContributionsByPlatform(named []NamedPlatformStats) map[string]map
 	return result
 }
 
-func renderPlatformLegend(x, y int, platforms []NamedPlatformStats) string {
-	seen := make(map[PlatformName]bool)
+func renderPlatformLegend(x, y int) string {
 	var legend string
 	dx := x
 	for _, p := range platformOrder {
-		for _, ns := range platforms {
-			if ns.Platform == p && !seen[p] {
-				seen[p] = true
-				legend += fmt.Sprintf(`<rect x="%d" y="%d" width="10" height="10" rx="2" fill="%s"/>`, dx, y, p.Color())
-				legend += fmt.Sprintf(`<text x="%d" y="%d" class="legend-label">%s</text>`, dx+14, y+9, string(p))
-				dx += 14 + len(string(p))*7 + 12
-			}
-		}
+		legend += fmt.Sprintf(`<rect x="%d" y="%d" width="10" height="10" rx="2" fill="%s"/>`, dx, y, p.Color())
+		legend += fmt.Sprintf(`<text x="%d" y="%d" class="legend-label">%s</text>`, dx+14, y+9, string(p))
+		dx += 14 + len(string(p))*7 + 12
 	}
 	return legend
 }
