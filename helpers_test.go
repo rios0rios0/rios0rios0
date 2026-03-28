@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -68,6 +69,78 @@ func TestFormatNumber(t *testing.T) {
 	})
 }
 
+func TestTopNLanguagesForPlatform(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return empty map for empty input", func(t *testing.T) {
+		// given
+		langs := map[string]int64{}
+
+		// when
+		result := topNLanguagesForPlatform(langs, 5)
+
+		// then
+		assert.Empty(t, result)
+	})
+
+	t.Run("should return empty map when all values are zero", func(t *testing.T) {
+		// given
+		langs := map[string]int64{"Go": 0, "Python": 0}
+
+		// when
+		result := topNLanguagesForPlatform(langs, 5)
+
+		// then
+		assert.Empty(t, result)
+	})
+
+	t.Run("should return all languages when fewer than N", func(t *testing.T) {
+		// given
+		langs := map[string]int64{"Go": 700, "Python": 300}
+
+		// when
+		result := topNLanguagesForPlatform(langs, 5)
+
+		// then
+		assert.Len(t, result, 2)
+		assert.Equal(t, int64(7000), result["Go"])
+		assert.Equal(t, int64(3000), result["Python"])
+	})
+
+	t.Run("should keep only top N languages by value", func(t *testing.T) {
+		// given
+		langs := map[string]int64{
+			"Go": 500, "Python": 300, "Java": 200,
+			"Rust": 100, "Shell": 50, "Ruby": 30, "C": 20,
+		}
+
+		// when
+		result := topNLanguagesForPlatform(langs, 5)
+
+		// then
+		assert.Len(t, result, 5)
+		assert.Contains(t, result, "Go")
+		assert.Contains(t, result, "Python")
+		assert.Contains(t, result, "Java")
+		assert.Contains(t, result, "Rust")
+		assert.Contains(t, result, "Shell")
+		assert.NotContains(t, result, "Ruby")
+		assert.NotContains(t, result, "C")
+	})
+
+	t.Run("should normalize values to percentage scale", func(t *testing.T) {
+		// given
+		langs := map[string]int64{"Go": 500, "Python": 500}
+
+		// when
+		result := topNLanguagesForPlatform(langs, 5)
+
+		// then
+		assert.Equal(t, int64(5000), result["Go"])
+		assert.Equal(t, int64(5000), result["Python"])
+	})
+}
+
 func TestAggregateLanguagesByPlatform(t *testing.T) {
 	t.Parallel()
 
@@ -82,7 +155,7 @@ func TestAggregateLanguagesByPlatform(t *testing.T) {
 		assert.Empty(t, result)
 	})
 
-	t.Run("should nest languages by platform from multiple sources", func(t *testing.T) {
+	t.Run("should normalize and nest languages by platform from multiple sources", func(t *testing.T) {
 		// given
 		named := []NamedPlatformStats{
 			{PlatformGitHub, &PlatformStats{Languages: map[string]int64{"Go": 50000, "Python": 30000}}},
@@ -93,10 +166,114 @@ func TestAggregateLanguagesByPlatform(t *testing.T) {
 		result := aggregateLanguagesByPlatform(named)
 
 		// then
-		assert.Equal(t, int64(50000), result["Go"][PlatformGitHub])
-		assert.Equal(t, int64(20000), result["Go"][PlatformGitLab])
-		assert.Equal(t, int64(30000), result["Python"][PlatformGitHub])
-		assert.Equal(t, int64(10000), result["Java"][PlatformGitLab])
+		// GitHub: Go=50000/80000*10000=6250, Python=30000/80000*10000=3750
+		assert.Equal(t, int64(6250), result["Go"][PlatformGitHub])
+		assert.Equal(t, int64(3750), result["Python"][PlatformGitHub])
+		// GitLab: Go=20000/30000*10000=6666, Java=10000/30000*10000=3333
+		assert.Equal(t, int64(6666), result["Go"][PlatformGitLab])
+		assert.Equal(t, int64(3333), result["Java"][PlatformGitLab])
+	})
+
+	t.Run("should give equal weight to platforms with different raw scales", func(t *testing.T) {
+		// given
+		named := []NamedPlatformStats{
+			{PlatformGitHub, &PlatformStats{Languages: map[string]int64{"Go": 5000000}}},
+			{PlatformAzureDevOps, &PlatformStats{Languages: map[string]int64{"Go": 50}}},
+		}
+
+		// when
+		result := aggregateLanguagesByPlatform(named)
+
+		// then
+		assert.Equal(t, int64(10000), result["Go"][PlatformGitHub])
+		assert.Equal(t, int64(10000), result["Go"][PlatformAzureDevOps])
+	})
+
+	t.Run("should filter to top 5 per platform when more than 5 languages exist", func(t *testing.T) {
+		// given
+		named := []NamedPlatformStats{
+			{PlatformGitHub, &PlatformStats{Languages: map[string]int64{
+				"Go": 500, "Python": 400, "Java": 300,
+				"Rust": 200, "Shell": 100, "Ruby": 50, "C": 25,
+			}}},
+		}
+
+		// when
+		result := aggregateLanguagesByPlatform(named)
+
+		// then
+		assert.Len(t, result, 5)
+		assert.Contains(t, result, "Go")
+		assert.Contains(t, result, "Python")
+		assert.Contains(t, result, "Java")
+		assert.Contains(t, result, "Rust")
+		assert.Contains(t, result, "Shell")
+		assert.NotContains(t, result, "Ruby")
+		assert.NotContains(t, result, "C")
+	})
+}
+
+func TestClipDailyContributionsToRange(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should keep entries within range and remove entries outside", func(t *testing.T) {
+		// given
+		from := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		to := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
+		stats := &PlatformStats{
+			DailyContributions: map[string]int{
+				"2025-12-31": 3,
+				"2026-01-01": 5,
+				"2026-06-15": 2,
+				"2026-12-31": 1,
+				"2027-01-01": 4,
+			},
+		}
+
+		// when
+		clipDailyContributionsToRange(stats, from, to)
+
+		// then
+		assert.Equal(t, 3, len(stats.DailyContributions))
+		assert.Equal(t, 5, stats.DailyContributions["2026-01-01"])
+		assert.Equal(t, 2, stats.DailyContributions["2026-06-15"])
+		assert.Equal(t, 1, stats.DailyContributions["2026-12-31"])
+		assert.NotContains(t, stats.DailyContributions, "2025-12-31")
+		assert.NotContains(t, stats.DailyContributions, "2027-01-01")
+	})
+
+	t.Run("should handle empty contributions map", func(t *testing.T) {
+		// given
+		from := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		to := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
+		stats := &PlatformStats{
+			DailyContributions: map[string]int{},
+		}
+
+		// when
+		clipDailyContributionsToRange(stats, from, to)
+
+		// then
+		assert.Empty(t, stats.DailyContributions)
+	})
+
+	t.Run("should remove entries with unparseable dates", func(t *testing.T) {
+		// given
+		from := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		to := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
+		stats := &PlatformStats{
+			DailyContributions: map[string]int{
+				"invalid-date": 1,
+				"2026-06-15":   2,
+			},
+		}
+
+		// when
+		clipDailyContributionsToRange(stats, from, to)
+
+		// then
+		assert.Equal(t, 1, len(stats.DailyContributions))
+		assert.Equal(t, 2, stats.DailyContributions["2026-06-15"])
 	})
 }
 
@@ -390,5 +567,56 @@ func TestAccumulateByYear(t *testing.T) {
 		// then
 		assert.Equal(t, int64(20000), result[2026][0].Stats.Languages["Go"])
 		assert.Equal(t, int64(0), result[2026][0].Stats.Languages["OldLang"])
+	})
+}
+
+func TestRemoveSnapshotsForYear(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should remove all snapshots for the target year", func(t *testing.T) {
+		// given
+		history := &StatsHistory{
+			Version: 1,
+			Snapshots: []DailySnapshot{
+				{Date: "2025-03-15", Platforms: map[PlatformName]PlatformSnapshot{}},
+				{Date: "2025-06-20", Platforms: map[PlatformName]PlatformSnapshot{}},
+				{Date: "2026-01-10", Platforms: map[PlatformName]PlatformSnapshot{}},
+			},
+		}
+
+		// when
+		removeSnapshotsForYear(history, 2025)
+
+		// then
+		require.Equal(t, 1, len(history.Snapshots))
+		assert.Equal(t, "2026-01-10", history.Snapshots[0].Date)
+	})
+
+	t.Run("should preserve all snapshots when year has no matches", func(t *testing.T) {
+		// given
+		history := &StatsHistory{
+			Version: 1,
+			Snapshots: []DailySnapshot{
+				{Date: "2026-03-27", Platforms: map[PlatformName]PlatformSnapshot{}},
+			},
+		}
+
+		// when
+		removeSnapshotsForYear(history, 2025)
+
+		// then
+		require.Equal(t, 1, len(history.Snapshots))
+		assert.Equal(t, "2026-03-27", history.Snapshots[0].Date)
+	})
+
+	t.Run("should handle empty history gracefully", func(t *testing.T) {
+		// given
+		history := &StatsHistory{Version: 1}
+
+		// when
+		removeSnapshotsForYear(history, 2025)
+
+		// then
+		assert.Empty(t, history.Snapshots)
 	})
 }

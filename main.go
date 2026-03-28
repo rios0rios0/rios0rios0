@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -195,6 +196,17 @@ func addSnapshot(history *StatsHistory, date string, platforms []NamedPlatformSt
 	history.Snapshots = append(history.Snapshots, snap)
 }
 
+func removeSnapshotsForYear(history *StatsHistory, year int) {
+	prefix := fmt.Sprintf("%d-", year)
+	filtered := history.Snapshots[:0]
+	for _, s := range history.Snapshots {
+		if !strings.HasPrefix(s.Date, prefix) {
+			filtered = append(filtered, s)
+		}
+	}
+	history.Snapshots = filtered
+}
+
 func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 	type accumEntry struct {
 		maxCommits    int
@@ -347,8 +359,8 @@ func FetchGitHubStats(username, token string, from, to time.Time) (*PlatformStat
 
 	// Use GraphQL API for contributions + repos committed to
 	query := fmt.Sprintf(`{
-		"query": "query { user(login: \"%s\") { contributionsCollection { totalCommitContributions totalPullRequestContributions totalIssueContributions contributionCalendar { weeks { contributionDays { date contributionCount } } } commitContributionsByRepository(maxRepositories: 100) { contributions { totalCount } repository { name owner { login } isPrivate } } } repositories(first: 100, ownerAffiliations: OWNER, isFork: false, privacy: PUBLIC) { totalCount } } }"
-	}`, username)
+		"query": "query { user(login: \"%s\") { contributionsCollection(from: \"%s\", to: \"%s\") { totalCommitContributions totalPullRequestContributions totalIssueContributions contributionCalendar { weeks { contributionDays { date contributionCount } } } commitContributionsByRepository(maxRepositories: 100) { contributions { totalCount } repository { name owner { login } isPrivate } } } repositories(first: 100, ownerAffiliations: OWNER, isFork: false, privacy: PUBLIC) { totalCount } } }"
+	}`, username, from.Format(time.RFC3339), to.Format(time.RFC3339))
 
 	req, err := http.NewRequest("POST", "https://api.github.com/graphql", strings.NewReader(query))
 	if err != nil {
@@ -799,6 +811,7 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time)
 	userID := connData.AuthenticatedUser.ID
 
 	fromDate := from.Format("2006-01-02T15:04:05Z")
+	toDate := to.Format("2006-01-02T15:04:05Z")
 
 	// Get all projects
 	var projects []adoProject
@@ -880,9 +893,9 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time)
 			skip := 0
 			for {
 				commitsURL := fmt.Sprintf(
-					"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/commits?searchCriteria.author=%s&searchCriteria.fromDate=%s&$top=100&$skip=%d&api-version=7.0",
+					"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/commits?searchCriteria.author=%s&searchCriteria.fromDate=%s&searchCriteria.toDate=%s&$top=100&$skip=%d&api-version=7.0",
 					url.PathEscape(organization), url.PathEscape(proj.ID), url.PathEscape(repo.ID),
-					url.QueryEscape(displayName), url.QueryEscape(fromDate), skip,
+					url.QueryEscape(displayName), url.QueryEscape(fromDate), url.QueryEscape(toDate), skip,
 				)
 				req, err := newRequest("GET", commitsURL, nil)
 				if err != nil {
@@ -959,7 +972,7 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time)
 				if err != nil {
 					continue
 				}
-				if !prDate.Before(from) {
+				if !prDate.Before(from) && !prDate.After(to) {
 					stats.TotalPRsOrMRs++
 					date := prDate.Format("2006-01-02")
 					stats.DailyContributions[date]++
@@ -982,8 +995,8 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time)
 	// Count work items
 	wiqlURL := fmt.Sprintf("https://dev.azure.com/%s/_apis/wit/wiql?$top=20000&api-version=7.0", url.PathEscape(organization))
 	wiqlQuery := fmt.Sprintf(
-		`{"query": "SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @Me AND [System.CreatedDate] >= '%s'"}`,
-		from.Format("2006-01-02"),
+		`{"query": "SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @Me AND [System.CreatedDate] >= '%s' AND [System.CreatedDate] <= '%s'"}`,
+		from.Format("2006-01-02"), to.Format("2006-01-02"),
 	)
 	req, err = newRequest("POST", wiqlURL, strings.NewReader(wiqlQuery))
 	if err != nil {
@@ -1504,7 +1517,7 @@ func renderLanguagesBarChart(languages map[string]map[PlatformName]int64) (strin
 					segW = remaining
 				}
 			}
-			body += fmt.Sprintf(`<rect x="%d" y="0" width="%d" height="16" rx="2" fill="%s"><title>%s: %d bytes</title></rect>`, bx, segW, p.Color(), string(p), v)
+			body += fmt.Sprintf(`<rect x="%d" y="0" width="%d" height="16" rx="2" fill="%s"><title>%s: %.1f%%</title></rect>`, bx, segW, p.Color(), string(p), float64(v)/100.0)
 			bx += segW
 			remaining -= segW
 			nonZero--
@@ -1732,14 +1745,80 @@ func formatNumber(n int) string {
 	return fmt.Sprintf("%d", n)
 }
 
+func clipDailyContributionsToRange(stats *PlatformStats, from, to time.Time) {
+	for date := range stats.DailyContributions {
+		d, err := time.Parse("2006-01-02", date)
+		if err != nil || d.Before(from) || d.After(to) {
+			delete(stats.DailyContributions, date)
+		}
+	}
+}
+
+// topNLanguagesForPlatform returns the top N languages by value, with values
+// normalized to a percentage scale (value * 10000 / total) so that platforms
+// using different units (bytes, percentages, file counts) contribute equally.
+func topNLanguagesForPlatform(langTotals map[string]int64, n int) map[string]int64 {
+	if len(langTotals) == 0 {
+		return make(map[string]int64)
+	}
+
+	type entry struct {
+		name  string
+		value int64
+	}
+	var entries []entry
+	for name, val := range langTotals {
+		if val > 0 {
+			entries = append(entries, entry{name, val})
+		}
+	}
+	if len(entries) == 0 {
+		return make(map[string]int64)
+	}
+
+	sort.Slice(entries, func(i, j int) bool { return entries[i].value > entries[j].value })
+	if len(entries) > n {
+		entries = entries[:n]
+	}
+
+	var total int64
+	for _, e := range entries {
+		total += e.value
+	}
+
+	result := make(map[string]int64, len(entries))
+	for _, e := range entries {
+		result[e.name] = e.value * 10000 / total
+	}
+	return result
+}
+
 func aggregateLanguagesByPlatform(named []NamedPlatformStats) map[string]map[PlatformName]int64 {
-	result := make(map[string]map[PlatformName]int64)
+	// Phase 1: Collect raw totals per platform
+	platformLangs := make(map[PlatformName]map[string]int64)
 	for _, ns := range named {
-		for lang, bytes := range ns.Stats.Languages {
+		if platformLangs[ns.Platform] == nil {
+			platformLangs[ns.Platform] = make(map[string]int64)
+		}
+		for lang, val := range ns.Stats.Languages {
+			platformLangs[ns.Platform][lang] += val
+		}
+	}
+
+	// Phase 2: For each platform, keep top 5 and normalize to common scale
+	normalizedPlatformLangs := make(map[PlatformName]map[string]int64)
+	for platform, langs := range platformLangs {
+		normalizedPlatformLangs[platform] = topNLanguagesForPlatform(langs, 5)
+	}
+
+	// Phase 3: Combine into language -> platform -> normalized value
+	result := make(map[string]map[PlatformName]int64)
+	for platform, langs := range normalizedPlatformLangs {
+		for lang, val := range langs {
 			if result[lang] == nil {
 				result[lang] = make(map[PlatformName]int64)
 			}
-			result[lang][ns.Platform] += bytes
+			result[lang][platform] = val
 		}
 	}
 	return result
@@ -1850,6 +1929,7 @@ func main() {
 	currentYear := now.Year()
 
 	mode := getEnvOrDefault("RUN_MODE", "daily")
+	var targetYear int
 
 	var from, to time.Time
 	todayDate := now.UTC().Truncate(24 * time.Hour)
@@ -1857,6 +1937,24 @@ func main() {
 	if mode == "bootstrap" {
 		from = time.Date(todayDate.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
 		to = todayDate
+	} else if mode == "recalculate" {
+		targetYearStr := os.Getenv("TARGET_YEAR")
+		if targetYearStr == "" {
+			fmt.Fprintln(os.Stderr, "Error: TARGET_YEAR is required for recalculate mode")
+			os.Exit(1)
+		}
+		parsed, err := strconv.Atoi(strings.TrimSpace(targetYearStr))
+		targetYear = parsed
+		if err != nil || targetYear < 2000 || targetYear > todayDate.Year() {
+			fmt.Fprintf(os.Stderr, "Error: TARGET_YEAR must be between 2000 and %d, got: %s\n", todayDate.Year(), targetYearStr)
+			os.Exit(1)
+		}
+		from = time.Date(targetYear, 1, 1, 0, 0, 0, 0, time.UTC)
+		if targetYear == todayDate.Year() {
+			to = todayDate
+		} else {
+			to = time.Date(targetYear, 12, 31, 0, 0, 0, 0, time.UTC)
+		}
 	} else {
 		from = todayDate
 		to = todayDate
@@ -1955,13 +2053,23 @@ func main() {
 		}
 	}
 
-	// 3. Save today's snapshot to history
-	addSnapshot(history, today, namedStats)
+	// Clip daily contributions to [from, to] as a safety net against API leakage
+	for _, ns := range namedStats {
+		clipDailyContributionsToRange(ns.Stats, from, to)
+	}
+
+	// 3. Save snapshot to history
+	snapshotDate := today
+	if mode == "recalculate" {
+		removeSnapshotsForYear(history, targetYear)
+		snapshotDate = to.Format("2006-01-02")
+	}
+	addSnapshot(history, snapshotDate, namedStats)
 	if err := saveStatsHistory(history, historyPath); err != nil {
 		fmt.Printf("Error saving history: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("Saved snapshot for %s to %s\n", today, historyPath)
+	fmt.Printf("Saved snapshot for %s to %s\n", snapshotDate, historyPath)
 
 	// 4. Build per-year accumulated data
 	yearlyStats := accumulateByYear(history)
