@@ -371,4 +371,101 @@ func TestAccumulateByYear(t *testing.T) {
 		assert.Equal(t, 100, result[2026][0].Stats.TotalCommits)
 		assert.Equal(t, 5, result[2026][0].Stats.DailyContributions["2026-03-25"])
 	})
+
+	t.Run("should use absolute language values for single snapshot", func(t *testing.T) {
+		// given
+		history := &StatsHistory{
+			Version: 1,
+			Snapshots: []DailySnapshot{
+				{
+					Date: "2026-03-27",
+					Platforms: map[PlatformName]PlatformSnapshot{
+						PlatformGitHub: {
+							TotalCommits:       100,
+							Languages:          map[string]int64{"Go": 50000, "Python": 30000},
+							DailyContributions: map[string]int{},
+						},
+					},
+				},
+			},
+		}
+
+		// when
+		result := accumulateByYear(history)
+
+		// then
+		assert.Equal(t, int64(50000), result[2026][0].Stats.Languages["Go"])
+		assert.Equal(t, int64(30000), result[2026][0].Stats.Languages["Python"])
+	})
+
+	t.Run("should compute language delta between earliest and latest snapshots", func(t *testing.T) {
+		// given
+		history := &StatsHistory{
+			Version: 1,
+			Snapshots: []DailySnapshot{
+				{
+					Date: "2026-01-15",
+					Platforms: map[PlatformName]PlatformSnapshot{
+						PlatformGitHub: {
+							TotalCommits:       50,
+							Languages:          map[string]int64{"Go": 100000, "Python": 50000},
+							DailyContributions: map[string]int{},
+						},
+					},
+				},
+				{
+					Date: "2026-03-27",
+					Platforms: map[PlatformName]PlatformSnapshot{
+						PlatformGitHub: {
+							TotalCommits:       150,
+							Languages:          map[string]int64{"Go": 180000, "Python": 55000, "Rust": 20000},
+							DailyContributions: map[string]int{},
+						},
+					},
+				},
+			},
+		}
+
+		// when
+		result := accumulateByYear(history)
+
+		// then
+		assert.Equal(t, int64(80000), result[2026][0].Stats.Languages["Go"])
+		assert.Equal(t, int64(5000), result[2026][0].Stats.Languages["Python"])
+		assert.Equal(t, int64(20000), result[2026][0].Stats.Languages["Rust"])
+	})
+
+	t.Run("should clamp negative language delta to zero when repo deleted", func(t *testing.T) {
+		// given
+		history := &StatsHistory{
+			Version: 1,
+			Snapshots: []DailySnapshot{
+				{
+					Date: "2026-01-15",
+					Platforms: map[PlatformName]PlatformSnapshot{
+						PlatformGitHub: {
+							Languages:          map[string]int64{"Go": 100000, "OldLang": 50000},
+							DailyContributions: map[string]int{},
+						},
+					},
+				},
+				{
+					Date: "2026-03-27",
+					Platforms: map[PlatformName]PlatformSnapshot{
+						PlatformGitHub: {
+							Languages:          map[string]int64{"Go": 120000},
+							DailyContributions: map[string]int{},
+						},
+					},
+				},
+			},
+		}
+
+		// when
+		result := accumulateByYear(history)
+
+		// then
+		assert.Equal(t, int64(20000), result[2026][0].Stats.Languages["Go"])
+		assert.Equal(t, int64(0), result[2026][0].Stats.Languages["OldLang"])
+	})
 }
