@@ -1517,7 +1517,8 @@ func renderLanguagesBarChart(languages map[string]map[PlatformName]int64) (strin
 					segW = remaining
 				}
 			}
-			body += fmt.Sprintf(`<rect x="%d" y="0" width="%d" height="16" rx="2" fill="%s"><title>%s: %.1f%%</title></rect>`, bx, segW, p.Color(), string(p), float64(v)/100.0)
+			platformPct := float64(v) / float64(e.Total) * 100.0
+			body += fmt.Sprintf(`<rect x="%d" y="0" width="%d" height="16" rx="2" fill="%s"><title>%s: %.1f%%</title></rect>`, bx, segW, p.Color(), string(p), platformPct)
 			bx += segW
 			remaining -= segW
 			nonZero--

@@ -214,6 +214,21 @@ func TestRenderLanguagesBarChart(t *testing.T) {
 		assert.Contains(t, result, `width="495"`)
 	})
 
+	t.Run("should show per-platform tooltip percentages for multi-platform language", func(t *testing.T) {
+		// given
+		languages := map[string]map[PlatformName]int64{
+			"Go": {PlatformGitHub: 30000, PlatformGitLab: 20000},
+		}
+
+		// when
+		result, err := renderLanguagesBarChart(languages)
+
+		// then
+		require.NoError(t, err)
+		assert.Contains(t, result, "<title>GitHub: 60.0%</title>")
+		assert.Contains(t, result, "<title>GitLab: 40.0%</title>")
+	})
+
 	t.Run("should show 100 percent for a single language", func(t *testing.T) {
 		// given
 		languages := map[string]map[PlatformName]int64{"Go": {PlatformGitHub: 100000}}
