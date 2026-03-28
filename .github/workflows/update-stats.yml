@@ -47,7 +47,8 @@ jobs:
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git checkout --orphan stats-temp
           git reset
-          git add stats_history.json combined_stats_*.svg contributions_*.svg top_languages_*.svg claude_tokens_final.svg
+          git add stats_history.json combined_stats_*.svg contributions_*.svg top_languages_*.svg
+          git add claude_tokens_final.svg 2>/dev/null || true
           git diff --staged --quiet && echo "No changes to commit" && exit 0
           git commit --message "chore(update): updated repository with latest stats"
           git push --force origin stats-temp:stats
