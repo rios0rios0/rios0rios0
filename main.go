@@ -1934,10 +1934,11 @@ func main() {
 
 	var from, to time.Time
 	todayDate := now.UTC().Truncate(24 * time.Hour)
+	todayEndOfDay := todayDate.Add(24*time.Hour - time.Second)
 
 	if mode == "bootstrap" {
 		from = time.Date(todayDate.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
-		to = todayDate
+		to = todayEndOfDay
 	} else if mode == "recalculate" {
 		targetYearStr := os.Getenv("TARGET_YEAR")
 		if targetYearStr == "" {
@@ -1952,13 +1953,13 @@ func main() {
 		}
 		from = time.Date(targetYear, 1, 1, 0, 0, 0, 0, time.UTC)
 		if targetYear == todayDate.Year() {
-			to = todayDate
+			to = todayEndOfDay
 		} else {
-			to = time.Date(targetYear, 12, 31, 0, 0, 0, 0, time.UTC)
+			to = time.Date(targetYear, 12, 31, 23, 59, 59, 0, time.UTC)
 		}
 	} else {
 		from = todayDate
-		to = todayDate
+		to = todayEndOfDay
 	}
 
 	fmt.Printf("Running in %s mode (from=%s, to=%s)\n", mode, from.Format("2006-01-02"), to.Format("2006-01-02"))
