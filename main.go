@@ -782,6 +782,9 @@ func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, er
 		}
 	}
 
+	// Track repos the user committed to for language detection
+	var activeRepos []adoRepoRef
+
 	for _, proj := range projects {
 		// Get repos
 		reposURL := fmt.Sprintf("https://dev.azure.com/%s/%s/_apis/git/repositories?api-version=7.0",
@@ -809,6 +812,7 @@ func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, er
 
 		// Count commits with dates
 		for _, repo := range reposResult.Value {
+			repoHadCommits := false
 			skip := 0
 			for {
 				commitsURL := fmt.Sprintf(
@@ -839,6 +843,9 @@ func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, er
 				}
 
 				stats.TotalCommits += commitsResult.Count
+				if commitsResult.Count > 0 {
+					repoHadCommits = true
+				}
 				for _, commit := range commitsResult.Value {
 					if len(commit.Author.Date) >= 10 {
 						date := commit.Author.Date[:10]
@@ -850,6 +857,9 @@ func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, er
 					break
 				}
 				skip += 100
+			}
+			if repoHadCommits {
+				activeRepos = append(activeRepos, adoRepoRef{ProjectID: proj.ID, RepoID: repo.ID})
 			}
 		}
 
@@ -899,8 +909,8 @@ func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, er
 		}
 	}
 
-	// Fetch languages from Azure DevOps repositories
-	fetchAzureDevOpsLanguages(newRequest, doRequest, organization, projects, stats)
+	// Fetch languages only from repos the user committed to
+	fetchAzureDevOpsLanguages(newRequest, doRequest, organization, activeRepos, stats)
 
 	// Count work items
 	wiqlURL := fmt.Sprintf("https://dev.azure.com/%s/_apis/wit/wiql?$top=20000&api-version=7.0", url.PathEscape(organization))
@@ -945,18 +955,23 @@ var extensionToLanguage = map[string]string{
 	".groovy": "Groovy", ".gradle": "Groovy", ".pl": "Perl",
 }
 
+type adoRepoRef struct {
+	ProjectID string
+	RepoID    string
+}
+
 func fetchAzureDevOpsLanguages(
 	newRequest func(string, string, io.Reader) (*http.Request, error),
 	doRequest func(*http.Request) ([]byte, int, error),
 	organization string,
-	projects []adoProject,
+	activeRepos []adoRepoRef,
 	stats *PlatformStats,
 ) {
-	for _, proj := range projects {
-		// Get repos for this project
-		reposURL := fmt.Sprintf("https://dev.azure.com/%s/%s/_apis/git/repositories?api-version=7.0",
-			url.PathEscape(organization), url.PathEscape(proj.ID))
-		req, err := newRequest("GET", reposURL, nil)
+	for _, ref := range activeRepos {
+		// Get repo metadata for default branch
+		repoURL := fmt.Sprintf("https://dev.azure.com/%s/%s/_apis/git/repositories/%s?api-version=7.0",
+			url.PathEscape(organization), url.PathEscape(ref.ProjectID), url.PathEscape(ref.RepoID))
+		req, err := newRequest("GET", repoURL, nil)
 		if err != nil {
 			continue
 		}
@@ -966,30 +981,22 @@ func fetchAzureDevOpsLanguages(
 			continue
 		}
 
-		var reposResult struct {
-			Value []struct {
-				ID            string `json:"id"`
-				DefaultBranch string `json:"defaultBranch"`
-			} `json:"value"`
+		var repoMeta struct {
+			DefaultBranch string `json:"defaultBranch"`
 		}
-		if err = json.Unmarshal(body, &reposResult); err != nil {
+		if err = json.Unmarshal(body, &repoMeta); err != nil || repoMeta.DefaultBranch == "" {
 			continue
 		}
 
-		for _, repo := range reposResult.Value {
-			if repo.DefaultBranch == "" {
-				continue
-			}
+		// Strip refs/heads/ prefix for the versionDescriptor parameter
+		branch := strings.TrimPrefix(repoMeta.DefaultBranch, "refs/heads/")
 
-			// Strip refs/heads/ prefix for the versionDescriptor parameter
-			branch := strings.TrimPrefix(repo.DefaultBranch, "refs/heads/")
-
-			// Fetch the file tree from the default branch with pagination
-			baseItemsURL := fmt.Sprintf(
-				"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/items?recursionLevel=Full&versionDescriptor.version=%s&versionDescriptor.versionType=branch&api-version=7.0",
-				url.PathEscape(organization), url.PathEscape(proj.ID), url.PathEscape(repo.ID),
-				url.QueryEscape(branch),
-			)
+		// Fetch the file tree from the default branch with pagination
+		baseItemsURL := fmt.Sprintf(
+			"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/items?recursionLevel=Full&versionDescriptor.version=%s&versionDescriptor.versionType=branch&api-version=7.0",
+			url.PathEscape(organization), url.PathEscape(ref.ProjectID), url.PathEscape(ref.RepoID),
+			url.QueryEscape(branch),
+		)
 
 			continuationToken := ""
 			for {
@@ -1039,7 +1046,6 @@ func fetchAzureDevOpsLanguages(
 					break
 				}
 			}
-		}
 	}
 }
 
