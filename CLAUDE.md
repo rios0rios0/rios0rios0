@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Go application that fetches user statistics from GitHub, GitLab, and Azure DevOps APIs and generates SVG visualizations for a GitHub profile README. Persists daily snapshots to `stats_history.json` for historical accumulation, then generates per-year SVG widgets. Runs daily via GitHub Actions, outputting to the `stats` branch.
 
+Single-file Go app (`main.go` only -- no `cmd/`, `internal/`, or multi-package structure). Requires Go 1.26+. Direct dependencies: `golang.org/x/text` (number formatting) and `stretchr/testify` (testing).
+
 ## Build and Test Commands
 
 ```bash
@@ -24,6 +26,8 @@ go build -o stats-generator main.go
 # Format and vet
 go fmt ./... && go vet ./...
 ```
+
+The Makefile only has `test` and `generate` targets. There are no `lint` or `sast` targets in this project.
 
 ## Environment Variables
 
@@ -51,7 +55,7 @@ Single-package monolith (`package main` in `main.go`). Key components:
 - **Platform fetchers** (`FetchGitHubStats`, `FetchGitLabStats`, `FetchAzureDevOpsStats`): HTTP clients returning `*PlatformStats`. Run in parallel via goroutines. GitHub uses GraphQL for contributions. Language data is filtered to repos with activity in the last year (GitHub: `pushed_at`, GitLab: `last_activity_at`, Azure DevOps: file extension analysis from repo trees). All fail gracefully (skip platform on error).
 - **SVG renderers**: Pure functions returning SVG strings. Each has a `Generate*` wrapper for disk I/O.
   - `renderCombinedStatsSVG([]NamedPlatformStats)` -- stats card with stacked bars
-  - `renderTokensHeatmap([]TokenUsage)` -- heatmap (full year width)
+  - `renderTokensHeatmap([]TokenUsage)` -- token usage line graph (named "heatmap" historically)
   - `renderLanguagesBarChart(map[string]map[PlatformName]int64)` -- stacked bar chart
   - `renderContributionHeatmap(contribs, startDate, endDate)` -- heatmap with full year range
 - **`main()` flow**: Load history -> fetch platforms (parallel) -> save snapshot -> accumulate by year -> generate per-year SVGs (full year range) -> copy current year to `_final.svg` -> generate tokens graph
@@ -81,4 +85,8 @@ Per-year SVGs (e.g., `combined_stats_2026.svg`) plus `_final.svg` aliases pointi
 
 ## CI/CD
 
-Workflow (`.github/workflows/update-stats.yml`) runs daily at midnight UTC and on push to main. Dual-checkout strategy: checks out `stats` branch first (for `stats_history.json`), then `main` into `src/` subdirectory. Regular commits (not amend+force-push) to preserve history.
+Workflow (`.github/workflows/update-stats.yml`) runs daily at midnight UTC and on push to main. Checks out `main`, then pulls `stats_history.json` from the `stats` branch if it exists. After generating SVGs, force-pushes an orphan commit to the `stats` branch.
+
+## Stale Documentation
+
+`.github/copilot-instructions.md` and `CONTRIBUTING.md` are outdated -- they reference the old template-based SVG approach, claim no tests exist, and list old workflow files. Use this CLAUDE.md as the source of truth.
