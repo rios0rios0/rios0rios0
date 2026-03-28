@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_final.svg" width="50%" alt="combined stats" />
+  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_final.svg" width="49%" alt="combined stats" />
   <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/top_languages_final.svg" width="50%" alt="top languages" />
 </div>
 
