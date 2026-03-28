@@ -1683,16 +1683,18 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 	dx := 25
 	row := 0
 	maxDx := width - 25
+	// Always show all 3 single-platform labels, plus any active combo labels
 	for _, combo := range comboOrder {
-		if !activeCombos[combo] {
+		isSinglePlatform := combo == comboGitHub || combo == comboGitLab || combo == comboAzureDevOps
+		if !isSinglePlatform && !activeCombos[combo] {
 			continue
 		}
 		label := comboLabels[combo]
 		scale := comboColorScale(combo)
 		entryWidth := 14 + len(label)*6 + 12
-		if dx+entryWidth > maxDx && dx > padLeft {
+		if dx+entryWidth > maxDx && dx > 25 {
 			row++
-			dx = padLeft
+			dx = 25
 		}
 		y := legendY + row*16
 		cells += fmt.Sprintf(`<rect x="%d" y="%d" width="10" height="10" rx="2" fill="%s"/>`, dx, y, scale[3])
@@ -2024,12 +2026,23 @@ func main() {
 		}
 	}
 
-	// 7. Generate Claude Code tokens line graph (not year-based)
+	// 7. Generate Claude Code tokens heatmap (not year-based)
 	tokenData, err := loadTokenUsage("claude_tokens.json")
 	if err != nil {
-		fmt.Printf("Warning: could not load Claude Code token data: %v (skipping tokens graph)\n", err)
+		fmt.Printf("Warning: could not load Claude Code token data: %v (generating empty heatmap)\n", err)
+		tokenData = []TokenUsage{}
+	}
+	fmt.Println("Generating Claude Code tokens graph...")
+	if len(tokenData) == 0 {
+		// Generate empty placeholder SVG
+		emptySvg := `<svg xmlns="http://www.w3.org/2000/svg" width="893" height="207" viewBox="0 0 893 207">
+<style>.title { font: 600 14px 'Segoe UI', Ubuntu, Sans-Serif; fill: #fff; } .empty { font: 400 12px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }</style>
+<rect width="893" height="207" rx="4.5" fill="#151515" stroke="#e4e2e2" stroke-opacity="0.2"/>
+<text x="25" y="25" class="title">Claude Code Tokens (by day)</text>
+<text x="446" y="120" text-anchor="middle" class="empty">No token data available</text>
+</svg>`
+		os.WriteFile(filepath.Join(outputDir, "claude_tokens_final.svg"), []byte(emptySvg), 0644)
 	} else {
-		fmt.Println("Generating Claude Code tokens graph...")
 		if err = GenerateTokensHeatmap(tokenData, filepath.Join(outputDir, "claude_tokens_final.svg")); err != nil {
 			fmt.Printf("Error generating tokens graph: %v\n", err)
 		}
