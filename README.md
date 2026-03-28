@@ -10,6 +10,7 @@
 <div align="center">
   <picture><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/contributions_final.svg" alt="contribution heatmap" /></picture>
 </div>
+
 <details>
 	<summary>2025</summary>
 	<div align="center">
