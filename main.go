@@ -430,16 +430,26 @@ func FetchGitHubStats(username, token string, from, to time.Time) (*PlatformStat
 	stats.TotalIssuesOrWIs = cc.TotalIssueContributions
 	stats.TotalRepos = gqlResp.Data.User.Repositories.TotalCount
 
+	var minDate, maxDate string
+	var totalDaysWithContribs int
 	for _, week := range cc.ContributionCalendar.Weeks {
 		for _, day := range week.ContributionDays {
 			if day.ContributionCount > 0 {
 				d, err := time.Parse("2006-01-02", day.Date)
 				if err == nil && !d.Before(from) && !d.After(to) {
 					stats.DailyContributions[day.Date] = day.ContributionCount
+					totalDaysWithContribs++
+					if minDate == "" || day.Date < minDate {
+						minDate = day.Date
+					}
+					if day.Date > maxDate {
+						maxDate = day.Date
+					}
 				}
 			}
 		}
 	}
+	fmt.Printf("[GitHub] API returned contributions: %d days with data, range %s to %s\n", totalDaysWithContribs, minDate, maxDate)
 
 	// Fetch languages weighted by commit activity in the contribution period.
 	// commitContributionsByRepository gives repos the user actually committed to,
@@ -649,6 +659,18 @@ func FetchGitLabStats(username, accessToken string, from, to time.Time) (*Platfo
 
 		page++
 	}
+
+	// Log contribution date range
+	var glMin, glMax string
+	for date := range stats.DailyContributions {
+		if glMin == "" || date < glMin {
+			glMin = date
+		}
+		if date > glMax {
+			glMax = date
+		}
+	}
+	fmt.Printf("[GitLab] Contributions: %d days with data, range %s to %s\n", len(stats.DailyContributions), glMin, glMax)
 
 	// Fetch languages only from projects with recent activity.
 	// Skip language fetching in daily mode (from == to) as it is the expensive part.
@@ -1015,6 +1037,18 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time)
 			stats.TotalIssuesOrWIs = len(wiqlResult.WorkItems)
 		}
 	}
+
+	// Log contribution date range
+	var adoMin, adoMax string
+	for date := range stats.DailyContributions {
+		if adoMin == "" || date < adoMin {
+			adoMin = date
+		}
+		if date > adoMax {
+			adoMax = date
+		}
+	}
+	fmt.Printf("[AzureDevOps] Contributions: %d days with data, range %s to %s\n", len(stats.DailyContributions), adoMin, adoMax)
 
 	return stats, nil
 }
@@ -1931,11 +1965,11 @@ func main() {
 
 	var from, to time.Time
 	todayDate := now.UTC().Truncate(24 * time.Hour)
-	todayEndOfDay := todayDate.Add(24*time.Hour - time.Second)
+	nowUTC := now.UTC()
 
 	if mode == "bootstrap" {
 		from = time.Date(todayDate.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
-		to = todayEndOfDay
+		to = nowUTC
 	} else if mode == "recalculate" {
 		targetYearStr := os.Getenv("TARGET_YEAR")
 		if targetYearStr == "" {
@@ -1950,16 +1984,16 @@ func main() {
 		}
 		from = time.Date(targetYear, 1, 1, 0, 0, 0, 0, time.UTC)
 		if targetYear == todayDate.Year() {
-			to = todayEndOfDay
+			to = nowUTC
 		} else {
 			to = time.Date(targetYear, 12, 31, 23, 59, 59, 0, time.UTC)
 		}
 	} else {
 		from = todayDate
-		to = todayEndOfDay
+		to = nowUTC
 	}
 
-	fmt.Printf("Running in %s mode (from=%s, to=%s)\n", mode, from.Format("2006-01-02"), to.Format("2006-01-02"))
+	fmt.Printf("Running in %s mode (from=%s, to=%s)\n", mode, from.Format(time.RFC3339), to.Format(time.RFC3339))
 
 	historyPath := getEnvOrDefault("STATS_HISTORY_PATH", "stats_history.json")
 	outputDir := getEnvOrDefault("SVG_OUTPUT_DIR", ".")
