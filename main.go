@@ -1613,8 +1613,8 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 	cellGap := 3
 	padLeft := 35
 	padTop := 50
-	padBottom := 65
-	legendHeight := 40
+	padBottom := 40
+	legendHeight := 35
 
 	// For a full calendar-year view (Jan 1 start), do not rewind to the previous
 	// Sunday as that would include days from the previous year.
