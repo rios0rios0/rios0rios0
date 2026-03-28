@@ -1,12 +1,10 @@
-name: 'Update Stats'
+name: 'Bootstrap Stats'
 
 on:
-  schedule:
-    - cron: '0 0 * * *'
   workflow_dispatch:
 
 jobs:
-  update:
+  bootstrap:
     runs-on: 'ubuntu-latest'
     permissions:
       contents: write
@@ -28,9 +26,9 @@ jobs:
           go-version: '1.26.1'
           cache-dependency-path: 'go.sum'
 
-      - name: 'Run Stats Generator (Daily)'
+      - name: 'Run Stats Generator (Bootstrap)'
         env:
-          RUN_MODE: 'daily'
+          RUN_MODE: 'bootstrap'
           GITHUB_USERNAME: ${{ github.repository_owner }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GITLAB_USERNAME: ${{ secrets.GITLAB_USERNAME }}
@@ -49,5 +47,5 @@ jobs:
           git add stats_history.json combined_stats_*.svg contributions_*.svg top_languages_*.svg
           git add claude_tokens_final.svg 2>/dev/null || true
           git diff --staged --quiet && echo "No changes to commit" && exit 0
-          git commit --message "chore(update): updated repository with latest stats"
+          git commit --message "chore(update): bootstrapped repository with full stats history"
           git push --force origin stats-temp:stats
