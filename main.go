@@ -1152,6 +1152,18 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 
 	streak := computeStreak(mergedContribs)
 	streakVals := make(map[PlatformName]int64)
+	for _, ns := range platformStats {
+		platContribs := make(map[string]int)
+		for d, c := range ns.Stats.DailyContributions {
+			if c > 0 {
+				platContribs[d] = c
+			}
+		}
+		platStreak := computeStreak(platContribs)
+		if platStreak > 0 {
+			streakVals[ns.Platform] = int64(platStreak)
+		}
+	}
 
 	iconCommits := `<path fill-rule="evenodd" d="M1.643 3.143L.427 1.927A.25.25 0 000 2.104V5.75c0 .138.112.25.25.25h3.646a.25.25 0 00.177-.427L2.715 4.215a6.5 6.5 0 11-1.18 4.458.75.75 0 10-1.493.154 8.001 8.001 0 101.6-5.684zM7.75 4a.75.75 0 01.75.75v2.992l2.028.812a.75.75 0 01-.557 1.392l-2.5-1A.75.75 0 017 8.25v-3.5A.75.75 0 017.75 4z"/>`
 	iconPRs := `<path fill-rule="evenodd" d="M7.177 3.073L9.573.677A.25.25 0 0110 .854v4.792a.25.25 0 01-.427.177L7.177 3.427a.25.25 0 010-.354zM3.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122v5.256a2.251 2.251 0 11-1.5 0V5.372A2.25 2.25 0 011.5 3.25zM11 2.5h-1V4h1a1 1 0 011 1v5.628a2.251 2.251 0 101.5 0V5A2.5 2.5 0 0011 2.5zm1 10.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0zM3.75 12a.75.75 0 100 1.5.75.75 0 000-1.5z"/>`
@@ -1332,7 +1344,7 @@ func renderTokensHeatmap(tokens []TokenUsage) (string, error) {
 	cellSize := 13
 	cellGap := 3
 	padLeft := 35
-	padTop := 35
+	padTop := 50
 	padBottom := 40
 	legendHeight := 20
 
@@ -1408,7 +1420,7 @@ func renderTokensHeatmap(tokens []TokenUsage) (string, error) {
 	.legend-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
 </style>
 <rect width="%d" height="%d" rx="4.5" fill="#151515" stroke="#e4e2e2" stroke-opacity="0.2"/>
-<text x="20" y="22" class="title">Claude Code Tokens (by day)</text>
+<text x="20" y="20" class="title">Claude Code Tokens (by day)</text>
 %s
 </svg>`, width, height, width, height, width, height, cells)
 
@@ -1463,6 +1475,9 @@ func renderLanguagesBarChart(languages map[string]map[PlatformName]int64) (strin
 	graphW := width - padLeft - padRight
 	legendHeight := 25
 	height := padTop + len(entries)*(barHeight+barGap) + legendHeight + 10
+	if height < 315 {
+		height = 315
+	}
 
 	maxBytes := entries[0].Total
 
@@ -1552,7 +1567,7 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 	cellSize := 13
 	cellGap := 3
 	padLeft := 35
-	padTop := 35
+	padTop := 50
 	padBottom := 65
 	legendHeight := 40
 
@@ -1705,7 +1720,7 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 	.legend-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
 </style>
 <rect width="%d" height="%d" rx="4.5" fill="#151515" stroke="#e4e2e2" stroke-opacity="0.2"/>
-<text x="20" y="18" class="title">Contributions (across all platforms)</text>
+<text x="20" y="20" class="title">Contributions (across all platforms)</text>
 %s
 </svg>`, width, height, width, height, width, height, cells)
 }
@@ -1906,8 +1921,13 @@ func main() {
 			hadErrors = true
 		}
 
-		// Languages
-		langsByPlatform := aggregateLanguagesByPlatform(stats)
+		// Languages: use fresh data for current year, accumulated for past years
+		var langsByPlatform map[string]map[PlatformName]int64
+		if year == currentYear {
+			langsByPlatform = aggregateLanguagesByPlatform(namedStats)
+		} else {
+			langsByPlatform = aggregateLanguagesByPlatform(stats)
+		}
 		if err := GenerateLanguagesBarChart(langsByPlatform, filepath.Join(outputDir, "top_languages"+suffix)); err != nil {
 			errMsg := err.Error()
 			if strings.Contains(errMsg, "no language data") || strings.Contains(errMsg, "all language byte counts are zero") {
