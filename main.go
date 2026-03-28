@@ -61,7 +61,7 @@ func (p PlatformName) Color() string {
 func (p PlatformName) ColorScale() [4]string {
 	switch p {
 	case PlatformGitHub:
-		return [4]string{"#0e4429", "#006d32", "#26a641", "#39d353"}
+		return [4]string{"#0e4429", "#006d32", "#1a7f37", "#238636"}
 	case PlatformGitLab:
 		return [4]string{"#4d1a10", "#b03820", "#d63e2a", "#e24329"}
 	case PlatformAzureDevOps:
@@ -94,7 +94,7 @@ func platformToCombo(p PlatformName) PlatformCombo {
 }
 
 var comboColorScales = map[PlatformCombo][4]string{
-	comboGitHub:                        {"#0e4429", "#006d32", "#26a641", "#39d353"},
+	comboGitHub:                        {"#0e4429", "#006d32", "#1a7f37", "#238636"},
 	comboGitLab:                        {"#4d1a10", "#b03820", "#d63e2a", "#e24329"},
 	comboAzureDevOps:                   {"#0a2d4d", "#0053a0", "#0066c0", "#0078d4"},
 	comboGitHub | comboGitLab:          {"#2a2a10", "#5a5520", "#7a7530", "#a09540"},
@@ -1322,8 +1322,8 @@ func renderTokensHeatmap(tokens []TokenUsage) (string, error) {
 
 	cellSize := 13
 	cellGap := 3
-	padLeft := 35
-	padTop := 50
+	padLeft := 60
+	padTop := 55
 	padBottom := 20
 	legendHeight := 20
 
@@ -1337,7 +1337,7 @@ func renderTokensHeatmap(tokens []TokenUsage) (string, error) {
 	if weeks > displayWeeks {
 		displayWeeks = weeks
 	}
-	width := padLeft + displayWeeks*(cellSize+cellGap) + 10
+	width := padLeft + displayWeeks*(cellSize+cellGap) + 25
 	height := padTop + 7*(cellSize+cellGap) + padBottom + legendHeight
 
 	var cells string
@@ -1345,7 +1345,7 @@ func renderTokensHeatmap(tokens []TokenUsage) (string, error) {
 	for i, label := range dayLabels {
 		if label != "" {
 			y := padTop + i*(cellSize+cellGap) + cellSize - 2
-			cells += fmt.Sprintf(`<text x="8" y="%d" class="day-label">%s</text>`, y, label)
+			cells += fmt.Sprintf(`<text x="25" y="%d" class="day-label">%s</text>`, y, label)
 		}
 	}
 
@@ -1385,7 +1385,7 @@ func renderTokensHeatmap(tokens []TokenUsage) (string, error) {
 	legendY := padTop + 7*(cellSize+cellGap) + 12
 	legendLabels := []string{"Less", "", "", "", "More"}
 	legendColors := []string{"#161b22", purpleScale[0], purpleScale[1], purpleScale[2], purpleScale[3]}
-	dx := padLeft
+	dx := 25
 	for i, color := range legendColors {
 		cells += fmt.Sprintf(`<rect x="%d" y="%d" width="10" height="10" rx="2" fill="%s"/>`, dx, legendY, color)
 		if legendLabels[i] != "" {
@@ -1404,7 +1404,7 @@ func renderTokensHeatmap(tokens []TokenUsage) (string, error) {
 	.legend-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
 </style>
 <rect width="%d" height="%d" rx="4.5" fill="#151515" stroke="#e4e2e2" stroke-opacity="0.2"/>
-<text x="20" y="20" class="title">Claude Code Tokens (by day)</text>
+<text x="25" y="25" class="title">Claude Code Tokens (by day)</text>
 %s
 </svg>`, width, height, width, height, width, height, cells)
 
@@ -1466,7 +1466,9 @@ func renderLanguagesBarChart(languages map[string]map[PlatformName]int64) (strin
 
 		delay := 450 + i*150
 		body += fmt.Sprintf(`<g class="stagger" style="animation-delay: %dms" transform="translate(25, %d)">`, delay, 45+i*28)
-		body += fmt.Sprintf(`<text class="stat" x="0" y="12.5">%s</text>`, e.Name)
+		langColor := languageColor(e.Name)
+		body += fmt.Sprintf(`<circle cx="7" cy="8" r="6" fill="%s"/>`, langColor)
+		body += fmt.Sprintf(`<text class="stat" x="20" y="12.5">%s</text>`, e.Name)
 
 		// Stacked bar segments by platform
 		bx := barAreaX
@@ -1539,8 +1541,8 @@ func GenerateLanguagesBarChart(languages map[string]map[PlatformName]int64, outp
 func renderContributionHeatmap(contributions map[string]map[PlatformName]int, startDate, endDate time.Time) string {
 	cellSize := 13
 	cellGap := 3
-	padLeft := 35
-	padTop := 50
+	padLeft := 60
+	padTop := 55
 	padBottom := 20
 	legendHeight := 20
 
@@ -1605,7 +1607,7 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 	if weeks > displayWeeks {
 		displayWeeks = weeks
 	}
-	width := padLeft + displayWeeks*(cellSize+cellGap) + 10
+	width := padLeft + displayWeeks*(cellSize+cellGap) + 25
 	height := padTop + 7*(cellSize+cellGap) + padBottom + legendHeight
 
 	var cells string
@@ -1613,7 +1615,7 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 	for i, label := range dayLabels {
 		if label != "" {
 			y := padTop + i*(cellSize+cellGap) + cellSize - 2
-			cells += fmt.Sprintf(`<text x="8" y="%d" class="day-label">%s</text>`, y, label)
+			cells += fmt.Sprintf(`<text x="25" y="%d" class="day-label">%s</text>`, y, label)
 		}
 	}
 
@@ -1670,9 +1672,9 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 		comboGitHub | comboGitLab, comboGitHub | comboAzureDevOps, comboGitLab | comboAzureDevOps,
 		comboGitHub | comboGitLab | comboAzureDevOps,
 	}
-	dx := padLeft
+	dx := 25
 	row := 0
-	maxDx := width - 20
+	maxDx := width - 25
 	for _, combo := range comboOrder {
 		if !activeCombos[combo] {
 			continue
@@ -1698,7 +1700,7 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 	.legend-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
 </style>
 <rect width="%d" height="%d" rx="4.5" fill="#151515" stroke="#e4e2e2" stroke-opacity="0.2"/>
-<text x="20" y="20" class="title">Contributions (across all platforms)</text>
+<text x="25" y="25" class="title">Contributions (across all platforms)</text>
 %s
 </svg>`, width, height, width, height, width, height, cells)
 }
@@ -1744,6 +1746,58 @@ func aggregateContributionsByPlatform(named []NamedPlatformStats) map[string]map
 		}
 	}
 	return result
+}
+
+var githubLanguageColors = map[string]string{
+	"Go":            "#00ADD8",
+	"Python":        "#3572A5",
+	"JavaScript":    "#f1e05a",
+	"TypeScript":    "#3178c6",
+	"Java":          "#b07219",
+	"C#":            "#178600",
+	"C++":           "#f34b7d",
+	"C":             "#555555",
+	"Ruby":          "#701516",
+	"PHP":           "#4F5D95",
+	"Rust":          "#dea584",
+	"Swift":         "#F05138",
+	"Kotlin":        "#A97BFF",
+	"Dart":          "#00B4AB",
+	"Shell":         "#89e051",
+	"HTML":          "#e34c26",
+	"CSS":           "#563d7c",
+	"Scala":         "#c22d40",
+	"Lua":           "#000080",
+	"Perl":          "#0298c3",
+	"R":             "#198CE7",
+	"Haskell":       "#5e5086",
+	"Elixir":        "#6e4a7e",
+	"Clojure":       "#db5855",
+	"Erlang":        "#B83998",
+	"Zig":           "#ec915c",
+	"Nix":           "#7e7eff",
+	"HCL":           "#844FBA",
+	"Terraform":     "#7B42BC",
+	"Makefile":      "#427819",
+	"Dockerfile":    "#384d54",
+	"Pascal":        "#E3F171",
+	"TeX":           "#3D6117",
+	"Go Template":   "#00ADD8",
+	"Vue":           "#41b883",
+	"Svelte":        "#ff3e00",
+	"SCSS":          "#c6538c",
+	"YAML":          "#cb171e",
+	"JSON":          "#292929",
+	"Markdown":      "#083fa1",
+	"Groovy":        "#4298b8",
+	"PowerShell":    "#012456",
+}
+
+func languageColor(name string) string {
+	if color, ok := githubLanguageColors[name]; ok {
+		return color
+	}
+	return "#8b949e"
 }
 
 func renderPlatformLegend(x, y int) string {
