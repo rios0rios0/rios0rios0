@@ -3,6 +3,10 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -619,5 +623,84 @@ func TestRemoveSnapshotsForYear(t *testing.T) {
 
 		// then
 		assert.Empty(t, history.Snapshots)
+	})
+}
+
+func TestFetchAzureDevOpsLanguages(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should accumulate language bytes from tree entries", func(t *testing.T) {
+		// given
+		repoMetaJSON, _ := json.Marshal(map[string]string{"defaultBranch": "refs/heads/main"})
+		commitsJSON, _ := json.Marshal(map[string]interface{}{
+			"value": []map[string]string{{"treeId": "abc123"}},
+		})
+		treeJSON, _ := json.Marshal(map[string]interface{}{
+			"truncated": false,
+			"treeEntries": []map[string]interface{}{
+				{"relativePath": "main.tf", "gitObjectType": "blob", "size": 5000},
+				{"relativePath": "variables.tf", "gitObjectType": "blob", "size": 3000},
+				{"relativePath": "src/app.ts", "gitObjectType": "blob", "size": 2000},
+				{"relativePath": "src", "gitObjectType": "tree", "size": 0},
+				{"relativePath": "README.md", "gitObjectType": "blob", "size": 500},
+			},
+		})
+
+		callIndex := 0
+		responses := [][]byte{repoMetaJSON, commitsJSON, treeJSON}
+
+		newRequest := func(method, url string, body io.Reader) (*http.Request, error) {
+			return http.NewRequest(method, url, body)
+		}
+		doRequest := func(req *http.Request) ([]byte, int, error) {
+			idx := callIndex
+			callIndex++
+			if idx < len(responses) {
+				return responses[idx], http.StatusOK, nil
+			}
+			return nil, http.StatusNotFound, fmt.Errorf("unexpected call %d", idx)
+		}
+
+		stats := &PlatformStats{Languages: make(map[string]int64)}
+		repos := []adoRepoRef{{ProjectID: "proj1", RepoID: "repo1"}}
+
+		// when
+		fetchAzureDevOpsLanguages(newRequest, doRequest, "myorg", repos, stats)
+
+		// then
+		assert.Equal(t, int64(8000), stats.Languages["HCL"])
+		assert.Equal(t, int64(2000), stats.Languages["TypeScript"])
+		assert.Equal(t, int64(500), stats.Languages["Markdown"])
+		assert.Zero(t, stats.Languages["tree"])
+	})
+
+	t.Run("should skip repos with no commits", func(t *testing.T) {
+		// given
+		repoMetaJSON, _ := json.Marshal(map[string]string{"defaultBranch": "refs/heads/main"})
+		commitsJSON, _ := json.Marshal(map[string]interface{}{"value": []map[string]string{}})
+
+		callIndex := 0
+		responses := [][]byte{repoMetaJSON, commitsJSON}
+
+		newRequest := func(method, url string, body io.Reader) (*http.Request, error) {
+			return http.NewRequest(method, url, body)
+		}
+		doRequest := func(req *http.Request) ([]byte, int, error) {
+			idx := callIndex
+			callIndex++
+			if idx < len(responses) {
+				return responses[idx], http.StatusOK, nil
+			}
+			return nil, http.StatusNotFound, fmt.Errorf("unexpected call %d", idx)
+		}
+
+		stats := &PlatformStats{Languages: make(map[string]int64)}
+		repos := []adoRepoRef{{ProjectID: "proj1", RepoID: "repo1"}}
+
+		// when
+		fetchAzureDevOpsLanguages(newRequest, doRequest, "myorg", repos, stats)
+
+		// then
+		assert.Empty(t, stats.Languages)
 	})
 }
