@@ -1466,7 +1466,7 @@ func renderLanguagesBarChart(languages map[string]map[PlatformName]int64) (strin
 
 		delay := 450 + i*150
 		body += fmt.Sprintf(`<g class="stagger" style="animation-delay: %dms" transform="translate(25, %d)">`, delay, 45+i*28)
-		body += fmt.Sprintf(`<text class="stat" x="185" y="12.5" text-anchor="end">%s</text>`, e.Name)
+		body += fmt.Sprintf(`<text class="stat" x="0" y="12.5">%s</text>`, e.Name)
 
 		// Stacked bar segments by platform
 		bx := barAreaX
