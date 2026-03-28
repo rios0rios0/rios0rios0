@@ -1568,13 +1568,10 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 	padBottom := 20
 	legendHeight := 20
 
-	// For a full calendar-year view (Jan 1 start), do not rewind to the previous
-	// Sunday as that would include days from the previous year.
-	isCalendarYear := startDate.Day() == 1 && startDate.Month() == time.January
-	if !isCalendarYear {
-		for startDate.Weekday() != time.Sunday {
-			startDate = startDate.AddDate(0, 0, -1)
-		}
+	// Always rewind to the previous Sunday so the grid rows match
+	// the Mon/Wed/Fri day labels. Pre-January cells render as empty.
+	for startDate.Weekday() != time.Sunday {
+		startDate = startDate.AddDate(0, 0, -1)
 	}
 
 	// Find max total count across all days
