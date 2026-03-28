@@ -7,8 +7,8 @@
 ---
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_final.svg" width="495" height="315" alt="combined stats" />
-  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/top_languages_final.svg" width="495" height="315" alt="top languages" />
+  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_final.svg" width="49%" alt="combined stats" />
+  <img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/top_languages_final.svg" width="49%" alt="top languages" />
 </div>
 
 <div align="center">
