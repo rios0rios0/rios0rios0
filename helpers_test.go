@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -209,6 +210,70 @@ func TestAggregateLanguagesByPlatform(t *testing.T) {
 		assert.Contains(t, result, "Shell")
 		assert.NotContains(t, result, "Ruby")
 		assert.NotContains(t, result, "C")
+	})
+}
+
+func TestClipDailyContributionsToRange(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should keep entries within range and remove entries outside", func(t *testing.T) {
+		// given
+		from := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		to := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
+		stats := &PlatformStats{
+			DailyContributions: map[string]int{
+				"2025-12-31": 3,
+				"2026-01-01": 5,
+				"2026-06-15": 2,
+				"2026-12-31": 1,
+				"2027-01-01": 4,
+			},
+		}
+
+		// when
+		clipDailyContributionsToRange(stats, from, to)
+
+		// then
+		assert.Equal(t, 3, len(stats.DailyContributions))
+		assert.Equal(t, 5, stats.DailyContributions["2026-01-01"])
+		assert.Equal(t, 2, stats.DailyContributions["2026-06-15"])
+		assert.Equal(t, 1, stats.DailyContributions["2026-12-31"])
+		assert.NotContains(t, stats.DailyContributions, "2025-12-31")
+		assert.NotContains(t, stats.DailyContributions, "2027-01-01")
+	})
+
+	t.Run("should handle empty contributions map", func(t *testing.T) {
+		// given
+		from := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		to := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
+		stats := &PlatformStats{
+			DailyContributions: map[string]int{},
+		}
+
+		// when
+		clipDailyContributionsToRange(stats, from, to)
+
+		// then
+		assert.Empty(t, stats.DailyContributions)
+	})
+
+	t.Run("should remove entries with unparseable dates", func(t *testing.T) {
+		// given
+		from := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		to := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
+		stats := &PlatformStats{
+			DailyContributions: map[string]int{
+				"invalid-date": 1,
+				"2026-06-15":   2,
+			},
+		}
+
+		// when
+		clipDailyContributionsToRange(stats, from, to)
+
+		// then
+		assert.Equal(t, 1, len(stats.DailyContributions))
+		assert.Equal(t, 2, stats.DailyContributions["2026-06-15"])
 	})
 }
 

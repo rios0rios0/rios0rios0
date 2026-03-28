@@ -359,8 +359,8 @@ func FetchGitHubStats(username, token string, from, to time.Time) (*PlatformStat
 
 	// Use GraphQL API for contributions + repos committed to
 	query := fmt.Sprintf(`{
-		"query": "query { user(login: \"%s\") { contributionsCollection { totalCommitContributions totalPullRequestContributions totalIssueContributions contributionCalendar { weeks { contributionDays { date contributionCount } } } commitContributionsByRepository(maxRepositories: 100) { contributions { totalCount } repository { name owner { login } isPrivate } } } repositories(first: 100, ownerAffiliations: OWNER, isFork: false, privacy: PUBLIC) { totalCount } } }"
-	}`, username)
+		"query": "query { user(login: \"%s\") { contributionsCollection(from: \"%s\", to: \"%s\") { totalCommitContributions totalPullRequestContributions totalIssueContributions contributionCalendar { weeks { contributionDays { date contributionCount } } } commitContributionsByRepository(maxRepositories: 100) { contributions { totalCount } repository { name owner { login } isPrivate } } } repositories(first: 100, ownerAffiliations: OWNER, isFork: false, privacy: PUBLIC) { totalCount } } }"
+	}`, username, from.Format(time.RFC3339), to.Format(time.RFC3339))
 
 	req, err := http.NewRequest("POST", "https://api.github.com/graphql", strings.NewReader(query))
 	if err != nil {
@@ -811,6 +811,7 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time)
 	userID := connData.AuthenticatedUser.ID
 
 	fromDate := from.Format("2006-01-02T15:04:05Z")
+	toDate := to.Format("2006-01-02T15:04:05Z")
 
 	// Get all projects
 	var projects []adoProject
@@ -892,9 +893,9 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time)
 			skip := 0
 			for {
 				commitsURL := fmt.Sprintf(
-					"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/commits?searchCriteria.author=%s&searchCriteria.fromDate=%s&$top=100&$skip=%d&api-version=7.0",
+					"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/commits?searchCriteria.author=%s&searchCriteria.fromDate=%s&searchCriteria.toDate=%s&$top=100&$skip=%d&api-version=7.0",
 					url.PathEscape(organization), url.PathEscape(proj.ID), url.PathEscape(repo.ID),
-					url.QueryEscape(displayName), url.QueryEscape(fromDate), skip,
+					url.QueryEscape(displayName), url.QueryEscape(fromDate), url.QueryEscape(toDate), skip,
 				)
 				req, err := newRequest("GET", commitsURL, nil)
 				if err != nil {
@@ -971,7 +972,7 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time)
 				if err != nil {
 					continue
 				}
-				if !prDate.Before(from) {
+				if !prDate.Before(from) && !prDate.After(to) {
 					stats.TotalPRsOrMRs++
 					date := prDate.Format("2006-01-02")
 					stats.DailyContributions[date]++
@@ -994,8 +995,8 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time)
 	// Count work items
 	wiqlURL := fmt.Sprintf("https://dev.azure.com/%s/_apis/wit/wiql?$top=20000&api-version=7.0", url.PathEscape(organization))
 	wiqlQuery := fmt.Sprintf(
-		`{"query": "SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @Me AND [System.CreatedDate] >= '%s'"}`,
-		from.Format("2006-01-02"),
+		`{"query": "SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @Me AND [System.CreatedDate] >= '%s' AND [System.CreatedDate] <= '%s'"}`,
+		from.Format("2006-01-02"), to.Format("2006-01-02"),
 	)
 	req, err = newRequest("POST", wiqlURL, strings.NewReader(wiqlQuery))
 	if err != nil {
@@ -1744,6 +1745,15 @@ func formatNumber(n int) string {
 	return fmt.Sprintf("%d", n)
 }
 
+func clipDailyContributionsToRange(stats *PlatformStats, from, to time.Time) {
+	for date := range stats.DailyContributions {
+		d, err := time.Parse("2006-01-02", date)
+		if err != nil || d.Before(from) || d.After(to) {
+			delete(stats.DailyContributions, date)
+		}
+	}
+}
+
 // topNLanguagesForPlatform returns the top N languages by value, with values
 // normalized to a percentage scale (value * 10000 / total) so that platforms
 // using different units (bytes, percentages, file counts) contribute equally.
@@ -2041,6 +2051,11 @@ func main() {
 				}
 			}
 		}
+	}
+
+	// Clip daily contributions to [from, to] as a safety net against API leakage
+	for _, ns := range namedStats {
+		clipDailyContributionsToRange(ns.Stats, from, to)
 	}
 
 	// 3. Save snapshot to history
