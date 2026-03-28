@@ -195,6 +195,17 @@ func addSnapshot(history *StatsHistory, date string, platforms []NamedPlatformSt
 	history.Snapshots = append(history.Snapshots, snap)
 }
 
+func removeSnapshotsForYear(history *StatsHistory, year int) {
+	prefix := fmt.Sprintf("%d-", year)
+	filtered := history.Snapshots[:0]
+	for _, s := range history.Snapshots {
+		if !strings.HasPrefix(s.Date, prefix) {
+			filtered = append(filtered, s)
+		}
+	}
+	history.Snapshots = filtered
+}
+
 func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 	type accumEntry struct {
 		maxCommits    int
@@ -1850,6 +1861,7 @@ func main() {
 	currentYear := now.Year()
 
 	mode := getEnvOrDefault("RUN_MODE", "daily")
+	var targetYear int
 
 	var from, to time.Time
 	todayDate := now.UTC().Truncate(24 * time.Hour)
@@ -1857,6 +1869,22 @@ func main() {
 	if mode == "bootstrap" {
 		from = time.Date(todayDate.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
 		to = todayDate
+	} else if mode == "recalculate" {
+		targetYearStr := os.Getenv("TARGET_YEAR")
+		if targetYearStr == "" {
+			fmt.Fprintln(os.Stderr, "Error: TARGET_YEAR is required for recalculate mode")
+			os.Exit(1)
+		}
+		if _, err := fmt.Sscanf(targetYearStr, "%d", &targetYear); err != nil || targetYear < 2000 || targetYear > todayDate.Year() {
+			fmt.Fprintf(os.Stderr, "Error: TARGET_YEAR must be between 2000 and %d, got: %s\n", todayDate.Year(), targetYearStr)
+			os.Exit(1)
+		}
+		from = time.Date(targetYear, 1, 1, 0, 0, 0, 0, time.UTC)
+		if targetYear == todayDate.Year() {
+			to = todayDate
+		} else {
+			to = time.Date(targetYear, 12, 31, 0, 0, 0, 0, time.UTC)
+		}
 	} else {
 		from = todayDate
 		to = todayDate
@@ -1955,13 +1983,18 @@ func main() {
 		}
 	}
 
-	// 3. Save today's snapshot to history
-	addSnapshot(history, today, namedStats)
+	// 3. Save snapshot to history
+	snapshotDate := today
+	if mode == "recalculate" {
+		removeSnapshotsForYear(history, targetYear)
+		snapshotDate = to.Format("2006-01-02")
+	}
+	addSnapshot(history, snapshotDate, namedStats)
 	if err := saveStatsHistory(history, historyPath); err != nil {
 		fmt.Printf("Error saving history: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("Saved snapshot for %s to %s\n", today, historyPath)
+	fmt.Printf("Saved snapshot for %s to %s\n", snapshotDate, historyPath)
 
 	// 4. Build per-year accumulated data
 	yearlyStats := accumulateByYear(history)

@@ -392,3 +392,54 @@ func TestAccumulateByYear(t *testing.T) {
 		assert.Equal(t, int64(0), result[2026][0].Stats.Languages["OldLang"])
 	})
 }
+
+func TestRemoveSnapshotsForYear(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should remove all snapshots for the target year", func(t *testing.T) {
+		// given
+		history := &StatsHistory{
+			Version: 1,
+			Snapshots: []DailySnapshot{
+				{Date: "2025-03-15", Platforms: map[PlatformName]PlatformSnapshot{}},
+				{Date: "2025-06-20", Platforms: map[PlatformName]PlatformSnapshot{}},
+				{Date: "2026-01-10", Platforms: map[PlatformName]PlatformSnapshot{}},
+			},
+		}
+
+		// when
+		removeSnapshotsForYear(history, 2025)
+
+		// then
+		require.Equal(t, 1, len(history.Snapshots))
+		assert.Equal(t, "2026-01-10", history.Snapshots[0].Date)
+	})
+
+	t.Run("should preserve all snapshots when year has no matches", func(t *testing.T) {
+		// given
+		history := &StatsHistory{
+			Version: 1,
+			Snapshots: []DailySnapshot{
+				{Date: "2026-03-27", Platforms: map[PlatformName]PlatformSnapshot{}},
+			},
+		}
+
+		// when
+		removeSnapshotsForYear(history, 2025)
+
+		// then
+		require.Equal(t, 1, len(history.Snapshots))
+		assert.Equal(t, "2026-03-27", history.Snapshots[0].Date)
+	})
+
+	t.Run("should handle empty history gracefully", func(t *testing.T) {
+		// given
+		history := &StatsHistory{Version: 1}
+
+		// when
+		removeSnapshotsForYear(history, 2025)
+
+		// then
+		assert.Empty(t, history.Snapshots)
+	})
+}

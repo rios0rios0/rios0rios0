@@ -18,6 +18,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ### Added
 
+- added `recalculate` workflow mode with `workflow_dispatch` to re-fetch and replace stats for a specific year
 - added unit tests for SVG generators with XML validation (22 test cases)
 - added unit tests for helper functions (`formatNumber`, `mergeContributions`, `mergeLanguages`)
 - added `Makefile` with `test` and `generate` targets

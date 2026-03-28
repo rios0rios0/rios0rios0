@@ -43,6 +43,8 @@ Path configuration (defaults work for local development):
 
 | Variable | Default | Purpose |
 |---|---|---|
+| `RUN_MODE` | `daily` | Operating mode: `daily`, `bootstrap`, or `recalculate` |
+| `TARGET_YEAR` | (none) | Year to recalculate (required when `RUN_MODE=recalculate`) |
 | `STATS_HISTORY_PATH` | `stats_history.json` | Path to read/write historical snapshots |
 | `SVG_OUTPUT_DIR` | `.` | Directory for generated SVG files |
 
@@ -58,6 +60,7 @@ Single-package monolith (`package main` in `main.go`). Key components:
   - `renderTokensHeatmap([]TokenUsage)` -- token usage line graph (named "heatmap" historically)
   - `renderLanguagesBarChart(map[string]map[PlatformName]int64)` -- stacked bar chart
   - `renderContributionHeatmap(contribs, startDate, endDate)` -- heatmap with full year range
+- **Run modes**: `daily` (today only, reuses languages), `bootstrap` (full current year), `recalculate` (full target year, replaces all snapshots for that year via `removeSnapshotsForYear`, regenerates SVGs for all years)
 - **`main()` flow**: Load history -> fetch platforms (parallel) -> save snapshot -> accumulate by year -> generate per-year SVGs (full year range) -> copy current year to `_final.svg` -> generate tokens graph
 
 Platform colors: GitHub `#238636`, GitLab `#e24329`, Azure DevOps `#0078d4`. Unified card chrome: `rx="4.5"`, `fill="#151515"`, `stroke="#e4e2e2"`, `stroke-opacity="0.2"`.
@@ -85,7 +88,12 @@ Per-year SVGs (e.g., `combined_stats_2026.svg`) plus `_final.svg` aliases pointi
 
 ## CI/CD
 
-Workflow (`.github/workflows/update-stats.yml`) runs daily at midnight UTC and on push to main. Checks out `main`, then pulls `stats_history.json` from the `stats` branch if it exists. After generating SVGs, force-pushes an orphan commit to the `stats` branch.
+Three workflows in `.github/workflows/`:
+- **`update-stats.yml`**: Runs daily at midnight UTC and on push to main. `RUN_MODE=daily`.
+- **`bootstrap-stats.yml`**: Manual dispatch only. `RUN_MODE=bootstrap`. Full current-year fetch with languages.
+- **`recalculate-stats.yml`**: Manual dispatch only with `year` input. `RUN_MODE=recalculate`. Re-fetches all data for the given year, replaces that year's snapshots, and regenerates SVGs for all years.
+
+All workflows check out `main`, restore `stats_history.json` from the `stats` branch, run the generator, and force-push an orphan commit to `stats`.
 
 ## Stale Documentation
 
