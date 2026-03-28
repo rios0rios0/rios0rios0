@@ -1110,37 +1110,6 @@ func fetchAzureDevOpsLanguages(
 
 // --- SVG Generators ---
 
-func computeStreak(contributions map[string]int) int {
-	var dates []string
-	for d, c := range contributions {
-		if c > 0 {
-			dates = append(dates, d)
-		}
-	}
-	sort.Strings(dates)
-
-	maxStreak := 0
-	currentStreak := 0
-	var prevDate time.Time
-
-	for _, d := range dates {
-		t, err := time.Parse("2006-01-02", d)
-		if err != nil {
-			continue
-		}
-		if !prevDate.IsZero() && t.Sub(prevDate) == 24*time.Hour {
-			currentStreak++
-		} else {
-			currentStreak = 1
-		}
-		if currentStreak > maxStreak {
-			maxStreak = currentStreak
-		}
-		prevDate = t
-	}
-	return maxStreak
-}
-
 func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 	printer := message.NewPrinter(language.English)
 
@@ -1157,9 +1126,6 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 	issueVals := make(map[PlatformName]int64)
 	repoVals := make(map[PlatformName]int64)
 
-	var totalBytes int64
-	mergedContribs := make(map[string]int)
-
 	for _, ns := range platformStats {
 		totalCommits += ns.Stats.TotalCommits
 		totalPRs += ns.Stats.TotalPRsOrMRs
@@ -1169,12 +1135,6 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 		prVals[ns.Platform] += int64(ns.Stats.TotalPRsOrMRs)
 		issueVals[ns.Platform] += int64(ns.Stats.TotalIssuesOrWIs)
 		repoVals[ns.Platform] += int64(ns.Stats.TotalRepos)
-		for _, bytes := range ns.Stats.Languages {
-			totalBytes += bytes
-		}
-		for date, count := range ns.Stats.DailyContributions {
-			mergedContribs[date] += count
-		}
 	}
 	// Estimate LoC only from platforms with real byte counts (GitHub only).
 	// GitLab stores language percentages scaled by 100, not actual bytes.
@@ -1195,27 +1155,11 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 	}
 	linesOfCode := int(realBytes / bytesPerLine)
 
-	streak := computeStreak(mergedContribs)
-	streakVals := make(map[PlatformName]int64)
-	for _, ns := range platformStats {
-		platContribs := make(map[string]int)
-		for d, c := range ns.Stats.DailyContributions {
-			if c > 0 {
-				platContribs[d] = c
-			}
-		}
-		platStreak := computeStreak(platContribs)
-		if platStreak > 0 {
-			streakVals[ns.Platform] = int64(platStreak)
-		}
-	}
-
 	iconCommits := `<path fill-rule="evenodd" d="M1.643 3.143L.427 1.927A.25.25 0 000 2.104V5.75c0 .138.112.25.25.25h3.646a.25.25 0 00.177-.427L2.715 4.215a6.5 6.5 0 11-1.18 4.458.75.75 0 10-1.493.154 8.001 8.001 0 101.6-5.684zM7.75 4a.75.75 0 01.75.75v2.992l2.028.812a.75.75 0 01-.557 1.392l-2.5-1A.75.75 0 017 8.25v-3.5A.75.75 0 017.75 4z"/>`
 	iconPRs := `<path fill-rule="evenodd" d="M7.177 3.073L9.573.677A.25.25 0 0110 .854v4.792a.25.25 0 01-.427.177L7.177 3.427a.25.25 0 010-.354zM3.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122v5.256a2.251 2.251 0 11-1.5 0V5.372A2.25 2.25 0 011.5 3.25zM11 2.5h-1V4h1a1 1 0 011 1v5.628a2.251 2.251 0 101.5 0V5A2.5 2.5 0 0011 2.5zm1 10.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0zM3.75 12a.75.75 0 100 1.5.75.75 0 000-1.5z"/>`
 	iconIssues := `<path fill-rule="evenodd" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm9 3a1 1 0 11-2 0 1 1 0 012 0zm-.25-6.25a.75.75 0 00-1.5 0v3.5a.75.75 0 001.5 0v-3.5z"/>`
 	iconRepos := `<path fill-rule="evenodd" d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-1 1v.17a2.5 2.5 0 01-.286-.958A2.495 2.495 0 012 11.5v-9zm10.5-1h-8a1 1 0 00-1 1v6.708A2.486 2.486 0 014.5 9h8V1.5z"/>`
 	iconCode := `<path fill-rule="evenodd" d="M4.72 3.22a.75.75 0 011.06 1.06L2.06 8l3.72 3.72a.75.75 0 11-1.06 1.06L.47 8.53a.75.75 0 010-1.06l4.25-4.25zm6.56 0a.75.75 0 10-1.06 1.06L13.94 8l-3.72 3.72a.75.75 0 101.06 1.06l4.25-4.25a.75.75 0 000-1.06l-4.25-4.25z"/>`
-	iconStreak := `<path fill-rule="evenodd" d="M7.998.002C5.026.002 2.975 2.1 2.31 3.548c-.333.723-.522 1.477-.522 2.087 0 1.236.755 2.26 1.756 2.943.39.267.833.49 1.272.658-.122.1-.242.21-.355.33A3.51 3.51 0 003.5 11.5a3.5 3.5 0 007 0c0-.96-.39-1.83-1.02-2.46a5.844 5.844 0 00-.397-.37c.466-.182.937-.425 1.346-.71C11.4 7.233 12.13 6.201 12.13 4.97c0-.61-.19-1.364-.522-2.087C10.942 1.434 8.888-.664 7.998.002zM7.5 12a2 2 0 01-2-2c0-.537.12-.976.373-1.393.247-.408.622-.786 1.127-1.107.505.32.88.699 1.127 1.107.254.417.373.856.373 1.393a2 2 0 01-2 2z"/>`
 
 	rows := []statRow{
 		{"Total Commits", iconCommits, commitVals, totalCommits},
@@ -1223,22 +1167,19 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 		{"Total Issues / Work Items", iconIssues, issueVals, totalIssues},
 		{"Total Repositories", iconRepos, repoVals, totalRepos},
 		{"Lines of Code", iconCode, locVals, linesOfCode},
-		{"Longest Streak (days)", iconStreak, streakVals, streak},
 	}
 
-	barAreaX := 260
-	barAreaW := 140
-	valueX := 455
+	const barAreaX = 210
+	const barAreaW = 150
+	const valueX = 445
 
 	var body string
 	for i, row := range rows {
-		yOffset := i * 30
 		delay := 450 + i*150
 
-		// Icon
-		body += fmt.Sprintf(`<g class="stagger" style="animation-delay: %dms" transform="translate(25, %d)">`, delay, yOffset)
+		body += fmt.Sprintf(`<g class="stagger" style="animation-delay: %dms" transform="translate(25, %d)">`, delay, 45+i*28)
 		body += fmt.Sprintf(`<svg data-testid="icon" class="icon" viewBox="0 0 16 16" version="1.1" width="16" height="16">%s</svg>`, row.Icon)
-		body += fmt.Sprintf(`<text class="stat bold" x="25" y="12.5">%s</text>`, row.Label)
+		body += fmt.Sprintf(`<text class="stat" x="25" y="12.5">%s</text>`, row.Label)
 
 		// Stacked bar
 		var barTotal int64
@@ -1283,33 +1224,26 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 		body += `</g>`
 	}
 
-	legend := renderPlatformLegend(25, 0)
+	legend := renderPlatformLegend(25, 230)
 
-	svgHeight := 350
-	titleY := 35
-	bodyY := 55
-	legendY := 280
-
-	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="495" height="%d" viewBox="0 0 495 %d" fill="none" role="img">
+	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="495" height="260" viewBox="0 0 495 260" fill="none" role="img">
 <title>Combined Stats</title>
 <style>
-	.header { font: 600 14px 'Segoe UI', Ubuntu, Sans-Serif; fill: #fff; animation: fadeInAnimation 0.8s ease-in-out forwards; }
-	.stat { font: 600 14px 'Segoe UI', Ubuntu, Sans-Serif; fill: #9f9f9f; }
-	.bold { font-weight: 700 }
+	.header { font: 600 14px 'Segoe UI', Ubuntu, Sans-Serif; fill: #fff; }
+	.stat { font: 400 12px 'Segoe UI', Ubuntu, Sans-Serif; fill: #c9d1d9; }
+	.bold { font-weight: 700; font-size: 12px; fill: #9f9f9f; }
 	.icon { fill: #79ff97; display: block; }
 	.legend-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
 	.stagger { opacity: 0; animation: fadeInAnimation 0.3s ease-in-out forwards; }
 	@keyframes fadeInAnimation { from { opacity: 0; } to { opacity: 1; } }
 </style>
 <rect data-testid="card-bg" x="0.5" y="0.5" rx="4.5" height="99%%" width="494" fill="#151515" stroke="#e4e2e2" stroke-opacity="0.2"/>
-<g data-testid="card-title" transform="translate(25, %d)">
+<g data-testid="card-title" transform="translate(25, 25)">
 	<text x="0" y="0" class="header" data-testid="header">Stats (across all platforms)</text>
 </g>
-<g data-testid="main-card-body" transform="translate(0, %d)">
-	<svg x="0" y="0">%s</svg>
-</g>
-<g transform="translate(0, %d)">%s</g>
-</svg>`, svgHeight, svgHeight, titleY, bodyY, body, legendY, legend)
+%s
+%s
+</svg>`, body, legend)
 }
 
 func GenerateCombinedStatsSVG(platformStats []NamedPlatformStats, outputPath string) error {
@@ -1501,8 +1435,8 @@ func renderLanguagesBarChart(languages map[string]map[PlatformName]int64) (strin
 		entries = append(entries, langEntry{name, total, platforms})
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Total > entries[j].Total })
-	if len(entries) > 10 {
-		entries = entries[:10]
+	if len(entries) > 5 {
+		entries = entries[:5]
 	}
 	if len(entries) == 0 {
 		return "", fmt.Errorf("no language data")
@@ -1516,34 +1450,26 @@ func renderLanguagesBarChart(languages map[string]map[PlatformName]int64) (strin
 		return "", fmt.Errorf("all language byte counts are zero")
 	}
 
-	width := 495
-	barHeight := 22
-	barGap := 6
-	padLeft := 110
-	padRight := 70
-	padTop := 35
-	graphW := width - padLeft - padRight
-	legendHeight := 25
-	height := padTop + len(entries)*(barHeight+barGap) + legendHeight + 10
-	if height < 350 {
-		height = 350
-	}
-
 	maxBytes := entries[0].Total
 
-	var bars string
+	const barAreaX = 210
+	const barAreaW = 150
+	const valueX = 445
+
+	var body string
 	for i, e := range entries {
-		y := padTop + i*(barHeight+barGap)
-		totalBarW := int(float64(e.Total) / float64(maxBytes) * float64(graphW))
+		pct := float64(e.Total) / float64(grandTotal) * 100
+		totalBarW := int(float64(e.Total) / float64(maxBytes) * float64(barAreaW))
 		if totalBarW < 2 {
 			totalBarW = 2
 		}
-		pct := float64(e.Total) / float64(grandTotal) * 100
 
-		bars += fmt.Sprintf(`<text x="%d" y="%d" class="lang-label" text-anchor="end">%s</text>`, padLeft-8, y+15, e.Name)
+		delay := 450 + i*150
+		body += fmt.Sprintf(`<g class="stagger" style="animation-delay: %dms" transform="translate(25, %d)">`, delay, 45+i*28)
+		body += fmt.Sprintf(`<text class="stat" x="185" y="12.5" text-anchor="end">%s</text>`, e.Name)
 
 		// Stacked bar segments by platform
-		bx := padLeft
+		bx := barAreaX
 		remaining := totalBarW
 		nonZero := 0
 		for _, p := range platformOrder {
@@ -1568,39 +1494,36 @@ func renderLanguagesBarChart(languages map[string]map[PlatformName]int64) (strin
 					segW = remaining
 				}
 			}
-			bars += fmt.Sprintf(`<rect x="%d" y="%d" width="%d" height="%d" rx="2" fill="%s" class="bar"><title>%s: %d bytes</title></rect>`, bx, y, segW, barHeight, p.Color(), string(p), v)
+			body += fmt.Sprintf(`<rect x="%d" y="0" width="%d" height="16" rx="2" fill="%s"><title>%s: %d bytes</title></rect>`, bx, segW, p.Color(), string(p), v)
 			bx += segW
 			remaining -= segW
 			nonZero--
 		}
 
-		bars += fmt.Sprintf(`<text x="%d" y="%d" class="pct-label">%.1f%%</text>`, padLeft+totalBarW+6, y+15, pct)
+		body += fmt.Sprintf(`<text class="stat bold" x="%d" y="12.5" text-anchor="end">%.1f%%</text>`, valueX, pct)
+		body += `</g>`
 	}
 
-	// Platform legend
-	legendY := padTop + len(entries)*(barHeight+barGap) + 5
-	var legend string
-	dx := padLeft
-	for _, p := range platformOrder {
-		legend += fmt.Sprintf(`<rect x="%d" y="%d" width="10" height="10" rx="2" fill="%s"/>`, dx, legendY, p.Color())
-		legend += fmt.Sprintf(`<text x="%d" y="%d" class="legend-label">%s</text>`, dx+14, legendY+9, string(p))
-		dx += 14 + len(string(p))*7 + 12
-	}
+	legend := renderPlatformLegend(25, 230)
 
-	svg := fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">
+	svg := fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="495" height="260" viewBox="0 0 495 260" fill="none" role="img">
+<title>Top Languages</title>
 <style>
-	.title { font: 600 14px 'Segoe UI', Ubuntu, Sans-Serif; fill: #fff; }
-	.lang-label { font: 400 12px 'Segoe UI', Ubuntu, Sans-Serif; fill: #c9d1d9; }
-	.pct-label { font: 400 11px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
+	.header { font: 600 14px 'Segoe UI', Ubuntu, Sans-Serif; fill: #fff; }
+	.stat { font: 400 12px 'Segoe UI', Ubuntu, Sans-Serif; fill: #c9d1d9; }
+	.bold { font-weight: 700; font-size: 12px; fill: #9f9f9f; }
+	.icon { fill: #79ff97; display: block; }
 	.legend-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
-	.bar { opacity: 0; animation: barGrow 0.5s ease-out forwards; }
-	@keyframes barGrow { from { opacity: 0; width: 0; } to { opacity: 1; } }
+	.stagger { opacity: 0; animation: fadeInAnimation 0.3s ease-in-out forwards; }
+	@keyframes fadeInAnimation { from { opacity: 0; } to { opacity: 1; } }
 </style>
-<rect width="%d" height="%d" rx="4.5" fill="#151515" stroke="#e4e2e2" stroke-opacity="0.2"/>
-<text x="20" y="22" class="title">Top Languages (across all platforms)</text>
+<rect data-testid="card-bg" x="0.5" y="0.5" rx="4.5" height="99%%" width="494" fill="#151515" stroke="#e4e2e2" stroke-opacity="0.2"/>
+<g data-testid="card-title" transform="translate(25, 25)">
+	<text x="0" y="0" class="header" data-testid="header">Top Languages (across all platforms)</text>
+</g>
 %s
 %s
-</svg>`, width, height, width, height, width, height, bars, legend)
+</svg>`, body, legend)
 
 	return svg, nil
 }

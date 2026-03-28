@@ -72,7 +72,7 @@ func TestRenderCombinedStatsSVG(t *testing.T) {
 		assertValidSVGXML(t, result)
 	})
 
-	t.Run("should contain new stat rows for repos, lines of code, and streak", func(t *testing.T) {
+	t.Run("should contain stat rows for repos and lines of code", func(t *testing.T) {
 		// given
 		stats := []NamedPlatformStats{
 			{PlatformGitHub, &PlatformStats{
@@ -94,7 +94,7 @@ func TestRenderCombinedStatsSVG(t *testing.T) {
 		assertValidSVGXML(t, result)
 		assert.Contains(t, result, "Total Repositories")
 		assert.Contains(t, result, "Lines of Code")
-		assert.Contains(t, result, "Longest Streak (days)")
+		assert.NotContains(t, result, "Longest Streak")
 	})
 }
 
