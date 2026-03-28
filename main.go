@@ -196,14 +196,16 @@ func addSnapshot(history *StatsHistory, date string, platforms []NamedPlatformSt
 }
 
 func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
-	// Collect per-year, per-platform: max totals, merged contributions (max per date), merged languages (max bytes per language)
 	type accumEntry struct {
 		maxCommits    int
 		maxPRs        int
 		maxIssues     int
 		maxRepos      int
-		contributions map[string]int // date -> max count
-		languages     map[string]int64
+		contributions map[string]int    // date -> max count
+		earliestDate  string            // earliest snapshot date in this year
+		earliestLangs map[string]int64  // language bytes from earliest snapshot
+		latestDate    string            // latest snapshot date in this year
+		latestLangs   map[string]int64  // language bytes from latest snapshot
 	}
 
 	yearPlatform := make(map[int]map[PlatformName]*accumEntry)
@@ -215,14 +217,17 @@ func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 		}
 
 		for platform, ps := range snap.Platforms {
-			// Accumulate stat totals for the snapshot's own year
 			if snapYear > 0 {
 				if yearPlatform[snapYear] == nil {
 					yearPlatform[snapYear] = make(map[PlatformName]*accumEntry)
 				}
 				entry := yearPlatform[snapYear][platform]
 				if entry == nil {
-					entry = &accumEntry{contributions: make(map[string]int), languages: make(map[string]int64)}
+					entry = &accumEntry{
+						contributions: make(map[string]int),
+						earliestLangs: make(map[string]int64),
+						latestLangs:   make(map[string]int64),
+					}
 					yearPlatform[snapYear][platform] = entry
 				}
 				if ps.TotalCommits > entry.maxCommits {
@@ -237,9 +242,19 @@ func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 				if ps.TotalRepos > entry.maxRepos {
 					entry.maxRepos = ps.TotalRepos
 				}
-				for lang, bytes := range ps.Languages {
-					if bytes > entry.languages[lang] {
-						entry.languages[lang] = bytes
+				// Track earliest and latest language snapshots for delta calculation
+				if entry.earliestDate == "" || snap.Date < entry.earliestDate {
+					entry.earliestDate = snap.Date
+					entry.earliestLangs = make(map[string]int64)
+					for lang, bytes := range ps.Languages {
+						entry.earliestLangs[lang] = bytes
+					}
+				}
+				if snap.Date > entry.latestDate {
+					entry.latestDate = snap.Date
+					entry.latestLangs = make(map[string]int64)
+					for lang, bytes := range ps.Languages {
+						entry.latestLangs[lang] = bytes
 					}
 				}
 			}
@@ -258,7 +273,11 @@ func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 				}
 				entry := yearPlatform[contribYear][platform]
 				if entry == nil {
-					entry = &accumEntry{contributions: make(map[string]int), languages: make(map[string]int64)}
+					entry = &accumEntry{
+						contributions: make(map[string]int),
+						earliestLangs: make(map[string]int64),
+						latestLangs:   make(map[string]int64),
+					}
 					yearPlatform[contribYear][platform] = entry
 				}
 				if count > entry.contributions[date] {
@@ -276,6 +295,32 @@ func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 			if entry == nil {
 				continue
 			}
+
+			// Compute language delta: latest - earliest for each language
+			langs := make(map[string]int64)
+			if entry.earliestDate == entry.latestDate {
+				// Single snapshot: use absolute values (first run)
+				for lang, bytes := range entry.latestLangs {
+					if bytes > 0 {
+						langs[lang] = bytes
+					}
+				}
+			} else {
+				// Multiple snapshots: compute delta
+				for lang, latestBytes := range entry.latestLangs {
+					delta := latestBytes - entry.earliestLangs[lang]
+					if delta > 0 {
+						langs[lang] = delta
+					}
+				}
+				// Include new languages that only appear in latest
+				for lang, latestBytes := range entry.latestLangs {
+					if _, exists := entry.earliestLangs[lang]; !exists && latestBytes > 0 {
+						langs[lang] = latestBytes
+					}
+				}
+			}
+
 			result[year] = append(result[year], NamedPlatformStats{
 				Platform: p,
 				Stats: &PlatformStats{
@@ -283,7 +328,7 @@ func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 					TotalPRsOrMRs:      entry.maxPRs,
 					TotalIssuesOrWIs:   entry.maxIssues,
 					TotalRepos:         entry.maxRepos,
-					Languages:          entry.languages,
+					Languages:          langs,
 					DailyContributions: entry.contributions,
 				},
 			})
@@ -1568,8 +1613,8 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 	cellGap := 3
 	padLeft := 35
 	padTop := 50
-	padBottom := 65
-	legendHeight := 40
+	padBottom := 40
+	legendHeight := 35
 
 	// For a full calendar-year view (Jan 1 start), do not rewind to the previous
 	// Sunday as that would include days from the previous year.
@@ -1921,13 +1966,8 @@ func main() {
 			hadErrors = true
 		}
 
-		// Languages: use fresh data for current year, accumulated for past years
-		var langsByPlatform map[string]map[PlatformName]int64
-		if year == currentYear {
-			langsByPlatform = aggregateLanguagesByPlatform(namedStats)
-		} else {
-			langsByPlatform = aggregateLanguagesByPlatform(stats)
-		}
+		// Languages: delta-based from accumulated history snapshots
+		langsByPlatform := aggregateLanguagesByPlatform(stats)
 		if err := GenerateLanguagesBarChart(langsByPlatform, filepath.Join(outputDir, "top_languages"+suffix)); err != nil {
 			errMsg := err.Error()
 			if strings.Contains(errMsg, "no language data") || strings.Contains(errMsg, "all language byte counts are zero") {
