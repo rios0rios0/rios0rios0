@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1515,7 +1516,7 @@ func renderLanguagesBarChart(languages map[string]map[PlatformName]int64) (strin
 					segW = remaining
 				}
 			}
-			body += fmt.Sprintf(`<rect x="%d" y="0" width="%d" height="16" rx="2" fill="%s"><title>%s: %d bytes</title></rect>`, bx, segW, p.Color(), string(p), v)
+			body += fmt.Sprintf(`<rect x="%d" y="0" width="%d" height="16" rx="2" fill="%s"><title>%s: %.1f%%</title></rect>`, bx, segW, p.Color(), string(p), float64(v)/100.0)
 			bx += segW
 			remaining -= segW
 			nonZero--
@@ -1743,14 +1744,71 @@ func formatNumber(n int) string {
 	return fmt.Sprintf("%d", n)
 }
 
+// topNLanguagesForPlatform returns the top N languages by value, with values
+// normalized to a percentage scale (value * 10000 / total) so that platforms
+// using different units (bytes, percentages, file counts) contribute equally.
+func topNLanguagesForPlatform(langTotals map[string]int64, n int) map[string]int64 {
+	if len(langTotals) == 0 {
+		return make(map[string]int64)
+	}
+
+	type entry struct {
+		name  string
+		value int64
+	}
+	var entries []entry
+	for name, val := range langTotals {
+		if val > 0 {
+			entries = append(entries, entry{name, val})
+		}
+	}
+	if len(entries) == 0 {
+		return make(map[string]int64)
+	}
+
+	sort.Slice(entries, func(i, j int) bool { return entries[i].value > entries[j].value })
+	if len(entries) > n {
+		entries = entries[:n]
+	}
+
+	var total int64
+	for _, e := range entries {
+		total += e.value
+	}
+
+	result := make(map[string]int64, len(entries))
+	for _, e := range entries {
+		result[e.name] = e.value * 10000 / total
+	}
+	return result
+}
+
 func aggregateLanguagesByPlatform(named []NamedPlatformStats) map[string]map[PlatformName]int64 {
-	result := make(map[string]map[PlatformName]int64)
+	// Phase 1: Collect raw totals per platform
+	platformLangs := make(map[PlatformName]map[string]int64)
 	for _, ns := range named {
-		for lang, bytes := range ns.Stats.Languages {
+		if platformLangs[ns.Platform] == nil {
+			platformLangs[ns.Platform] = make(map[string]int64)
+		}
+		for lang, val := range ns.Stats.Languages {
+			platformLangs[ns.Platform][lang] += val
+		}
+	}
+
+	// Phase 2: For each platform, keep top 5 and normalize to common scale
+	normalizedPlatformLangs := make(map[PlatformName]map[string]int64)
+	for platform, langs := range platformLangs {
+		normalizedPlatformLangs[platform] = topNLanguagesForPlatform(langs, 5)
+	}
+
+	// Phase 3: Combine into language -> platform -> normalized value
+	result := make(map[string]map[PlatformName]int64)
+	for platform, langs := range normalizedPlatformLangs {
+		for lang, val := range langs {
 			if result[lang] == nil {
 				result[lang] = make(map[PlatformName]int64)
 			}
-			result[lang][ns.Platform] += bytes
+			result[lang][platform] = val
 		}
 	}
 	return result
@@ -1875,7 +1933,9 @@ func main() {
 			fmt.Fprintln(os.Stderr, "Error: TARGET_YEAR is required for recalculate mode")
 			os.Exit(1)
 		}
-		if _, err := fmt.Sscanf(targetYearStr, "%d", &targetYear); err != nil || targetYear < 2000 || targetYear > todayDate.Year() {
+		parsed, err := strconv.Atoi(strings.TrimSpace(targetYearStr))
+		targetYear = parsed
+		if err != nil || targetYear < 2000 || targetYear > todayDate.Year() {
 			fmt.Fprintf(os.Stderr, "Error: TARGET_YEAR must be between 2000 and %d, got: %s\n", todayDate.Year(), targetYearStr)
 			os.Exit(1)
 		}
