@@ -1105,61 +1105,75 @@ func fetchAzureDevOpsLanguages(
 		// Strip refs/heads/ prefix for the versionDescriptor parameter
 		branch := strings.TrimPrefix(repoMeta.DefaultBranch, "refs/heads/")
 
-		// Fetch the file tree from the default branch with pagination
-		baseItemsURL := fmt.Sprintf(
-			"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/items?recursionLevel=Full&versionDescriptor.version=%s&versionDescriptor.versionType=branch&api-version=7.0",
+		// Get latest commit on default branch to obtain the root tree SHA
+		commitsURL := fmt.Sprintf(
+			"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/commits?searchCriteria.itemVersion.version=%s&$top=1&api-version=7.0",
 			url.PathEscape(organization), url.PathEscape(ref.ProjectID), url.PathEscape(ref.RepoID),
 			url.QueryEscape(branch),
 		)
+		req, err = newRequest("GET", commitsURL, nil)
+		if err != nil {
+			continue
+		}
 
-			continuationToken := ""
-			for {
-				itemsURL := baseItemsURL
-				if continuationToken != "" {
-					itemsURL += "&continuationToken=" + url.QueryEscape(continuationToken)
-				}
+		body, statusCode, err = doRequest(req)
+		if err != nil || statusCode != http.StatusOK {
+			continue
+		}
 
-				req, err := newRequest("GET", itemsURL, nil)
-				if err != nil {
-					break
-				}
+		var commitsResult struct {
+			Value []struct {
+				TreeID string `json:"treeId"`
+			} `json:"value"`
+		}
+		if err = json.Unmarshal(body, &commitsResult); err != nil || len(commitsResult.Value) == 0 || commitsResult.Value[0].TreeID == "" {
+			continue
+		}
 
-				resp, err := http.DefaultClient.Do(req)
-				if err != nil {
-					break
-				}
+		treeID := commitsResult.Value[0].TreeID
 
-				body, err := io.ReadAll(resp.Body)
-				resp.Body.Close()
-				if err != nil || resp.StatusCode != http.StatusOK {
-					break
-				}
+		// Fetch the full tree with file sizes (byte counts)
+		treeURL := fmt.Sprintf(
+			"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/trees/%s?recursive=true&api-version=7.0",
+			url.PathEscape(organization), url.PathEscape(ref.ProjectID), url.PathEscape(ref.RepoID),
+			url.PathEscape(treeID),
+		)
+		req, err = newRequest("GET", treeURL, nil)
+		if err != nil {
+			continue
+		}
 
-				var itemsResult struct {
-					Value []struct {
-						Path     string `json:"path"`
-						IsFolder bool   `json:"isFolder"`
-					} `json:"value"`
-				}
-				if err = json.Unmarshal(body, &itemsResult); err != nil {
-					break
-				}
+		body, statusCode, err = doRequest(req)
+		if err != nil || statusCode != http.StatusOK {
+			continue
+		}
 
-				for _, item := range itemsResult.Value {
-					if item.IsFolder {
-						continue
-					}
-					ext := strings.ToLower(filepath.Ext(item.Path))
-					if lang, ok := extensionToLanguage[ext]; ok {
-						stats.Languages[lang]++
-					}
-				}
+		var treeResult struct {
+			TreeEntries []struct {
+				RelativePath  string `json:"relativePath"`
+				GitObjectType string `json:"gitObjectType"`
+				Size          int64  `json:"size"`
+			} `json:"treeEntries"`
+			Truncated bool `json:"truncated"`
+		}
+		if err = json.Unmarshal(body, &treeResult); err != nil {
+			continue
+		}
 
-				continuationToken = resp.Header.Get("x-ms-continuationtoken")
-				if continuationToken == "" {
-					break
-				}
+		if treeResult.Truncated {
+			fmt.Printf("[AzureDevOps] Warning: tree truncated for repo %s/%s, language data may be incomplete\n",
+				ref.ProjectID, ref.RepoID)
+		}
+
+		for _, entry := range treeResult.TreeEntries {
+			if entry.GitObjectType != "blob" {
+				continue
 			}
+			ext := strings.ToLower(filepath.Ext(entry.RelativePath))
+			if lang, ok := extensionToLanguage[ext]; ok {
+				stats.Languages[lang] += entry.Size
+			}
+		}
 	}
 }
 
