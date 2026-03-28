@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -301,7 +302,7 @@ func FetchGitHubStats(username, token string) (*PlatformStats, error) {
 
 	// Use GraphQL API for contributions + repos committed to
 	query := fmt.Sprintf(`{
-		"query": "query { user(login: \"%s\") { contributionsCollection { totalCommitContributions totalPullRequestContributions totalIssueContributions contributionCalendar { weeks { contributionDays { date contributionCount } } } commitContributionsByRepository(maxRepositories: 100) { contributions { totalCount } repository { name owner { login } } } } repositories(first: 100, ownerAffiliations: OWNER, isFork: false) { totalCount } } }"
+		"query": "query { user(login: \"%s\") { contributionsCollection { totalCommitContributions totalPullRequestContributions totalIssueContributions contributionCalendar { weeks { contributionDays { date contributionCount } } } commitContributionsByRepository(maxRepositories: 100) { contributions { totalCount } repository { name owner { login } isPrivate } } } repositories(first: 100, ownerAffiliations: OWNER, isFork: false, privacy: PUBLIC) { totalCount } } }"
 	}`, username)
 
 	req, err := http.NewRequest("POST", "https://api.github.com/graphql", strings.NewReader(query))
@@ -347,8 +348,9 @@ func FetchGitHubStats(username, token string) (*PlatformStats, error) {
 							TotalCount int `json:"totalCount"`
 						} `json:"contributions"`
 						Repository struct {
-							Name  string `json:"name"`
-							Owner struct {
+							Name      string `json:"name"`
+							IsPrivate bool   `json:"isPrivate"`
+							Owner     struct {
 								Login string `json:"login"`
 							} `json:"owner"`
 						} `json:"repository"`
@@ -384,6 +386,9 @@ func FetchGitHubStats(username, token string) (*PlatformStats, error) {
 	// so we weight each repo's language bytes by its share of total commits.
 	var repoContribs []repoContribution
 	for _, rc := range cc.CommitContributionsByRepository {
+		if rc.Repository.IsPrivate {
+			continue
+		}
 		var entry repoContribution
 		entry.Contributions.TotalCount = rc.Contributions.TotalCount
 		entry.Repository.Name = rc.Repository.Name
@@ -419,6 +424,7 @@ func fetchGitHubLanguages(client *http.Client, username, token string, repoContr
 		return nil
 	}
 
+	successCount := 0
 	for _, rc := range repoContribs {
 		owner := rc.Repository.Owner.Login
 		name := rc.Repository.Name
@@ -441,6 +447,9 @@ func fetchGitHubLanguages(client *http.Client, username, token string, repoContr
 		if err != nil {
 			continue
 		}
+		if langResp.StatusCode != http.StatusOK {
+			continue
+		}
 
 		var langs map[string]int64
 		if err = json.Unmarshal(langBody, &langs); err != nil {
@@ -449,8 +458,13 @@ func fetchGitHubLanguages(client *http.Client, username, token string, repoContr
 
 		// Weight language bytes by the repo's share of total commits
 		for lang, byteCount := range langs {
-			stats.Languages[lang] += int64(float64(byteCount) * weight)
+			stats.Languages[lang] += int64(math.Round(float64(byteCount) * weight))
 		}
+		successCount++
+		stats.TotalRepos++
+	}
+	if successCount == 0 && len(repoContribs) > 0 {
+		return fmt.Errorf("all %d language requests failed", len(repoContribs))
 	}
 	return nil
 }
