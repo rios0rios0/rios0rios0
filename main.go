@@ -1285,7 +1285,7 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 
 	legend := renderPlatformLegend(25, 0, platformStats)
 
-	svgHeight := 315
+	svgHeight := 350
 	titleY := 35
 	bodyY := 55
 	legendY := 280
@@ -1390,7 +1390,7 @@ func renderTokensHeatmap(tokens []TokenUsage) (string, error) {
 	cellGap := 3
 	padLeft := 35
 	padTop := 50
-	padBottom := 40
+	padBottom := 20
 	legendHeight := 20
 
 	totalDays := int(endDate.Sub(startDate).Hours()/24) + 1
@@ -1398,7 +1398,12 @@ func renderTokensHeatmap(tokens []TokenUsage) (string, error) {
 	if weeks < 1 {
 		weeks = 1
 	}
-	width := padLeft + weeks*(cellSize+cellGap) + 10
+	// Standardize to 53 weeks width (full year) for consistent sizing
+	displayWeeks := 53
+	if weeks > displayWeeks {
+		displayWeeks = weeks
+	}
+	width := padLeft + displayWeeks*(cellSize+cellGap) + 10
 	height := padTop + 7*(cellSize+cellGap) + padBottom + legendHeight
 
 	var cells string
@@ -1520,8 +1525,8 @@ func renderLanguagesBarChart(languages map[string]map[PlatformName]int64) (strin
 	graphW := width - padLeft - padRight
 	legendHeight := 25
 	height := padTop + len(entries)*(barHeight+barGap) + legendHeight + 10
-	if height < 315 {
-		height = 315
+	if height < 350 {
+		height = 350
 	}
 
 	maxBytes := entries[0].Total
@@ -1613,8 +1618,8 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 	cellGap := 3
 	padLeft := 35
 	padTop := 50
-	padBottom := 40
-	legendHeight := 35
+	padBottom := 20
+	legendHeight := 20
 
 	// For a full calendar-year view (Jan 1 start), do not rewind to the previous
 	// Sunday as that would include days from the previous year.
@@ -1672,7 +1677,12 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 	if weeks < 1 {
 		weeks = 1
 	}
-	width := padLeft + weeks*(cellSize+cellGap) + 10
+	// Standardize to 53 weeks width (full year) for consistent sizing with tokens heatmap
+	displayWeeks := 53
+	if weeks > displayWeeks {
+		displayWeeks = weeks
+	}
+	width := padLeft + displayWeeks*(cellSize+cellGap) + 10
 	height := padTop + 7*(cellSize+cellGap) + padBottom + legendHeight
 
 	var cells string
