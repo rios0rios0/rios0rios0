@@ -339,7 +339,7 @@ func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 
 // --- GitHub ---
 
-func FetchGitHubStats(username, token string) (*PlatformStats, error) {
+func FetchGitHubStats(username, token string, from, to time.Time) (*PlatformStats, error) {
 	stats := &PlatformStats{
 		Languages:          make(map[string]int64),
 		DailyContributions: make(map[string]int),
@@ -421,7 +421,10 @@ func FetchGitHubStats(username, token string) (*PlatformStats, error) {
 	for _, week := range cc.ContributionCalendar.Weeks {
 		for _, day := range week.ContributionDays {
 			if day.ContributionCount > 0 {
-				stats.DailyContributions[day.Date] = day.ContributionCount
+				d, err := time.Parse("2006-01-02", day.Date)
+				if err == nil && !d.Before(from) && !d.After(to) {
+					stats.DailyContributions[day.Date] = day.ContributionCount
+				}
 			}
 		}
 	}
@@ -429,19 +432,22 @@ func FetchGitHubStats(username, token string) (*PlatformStats, error) {
 	// Fetch languages weighted by commit activity in the contribution period.
 	// commitContributionsByRepository gives repos the user actually committed to,
 	// so we weight each repo's language bytes by its share of total commits.
-	var repoContribs []repoContribution
-	for _, rc := range cc.CommitContributionsByRepository {
-		if rc.Repository.IsPrivate {
-			continue
+	// Skip language fetching in daily mode (from == to) as it is the expensive part.
+	if !from.Equal(to) {
+		var repoContribs []repoContribution
+		for _, rc := range cc.CommitContributionsByRepository {
+			if rc.Repository.IsPrivate {
+				continue
+			}
+			var entry repoContribution
+			entry.Contributions.TotalCount = rc.Contributions.TotalCount
+			entry.Repository.Name = rc.Repository.Name
+			entry.Repository.Owner.Login = rc.Repository.Owner.Login
+			repoContribs = append(repoContribs, entry)
 		}
-		var entry repoContribution
-		entry.Contributions.TotalCount = rc.Contributions.TotalCount
-		entry.Repository.Name = rc.Repository.Name
-		entry.Repository.Owner.Login = rc.Repository.Owner.Login
-		repoContribs = append(repoContribs, entry)
-	}
-	if err = fetchGitHubLanguages(client, username, token, repoContribs, stats); err != nil {
-		fmt.Printf("Warning: could not fetch GitHub languages: %v\n", err)
+		if err = fetchGitHubLanguages(client, username, token, repoContribs, stats); err != nil {
+			fmt.Printf("Warning: could not fetch GitHub languages: %v\n", err)
+		}
 	}
 
 	return stats, nil
@@ -516,7 +522,7 @@ func fetchGitHubLanguages(client *http.Client, username, token string, repoContr
 
 // --- GitLab ---
 
-func FetchGitLabStats(username, accessToken string) (*PlatformStats, error) {
+func FetchGitLabStats(username, accessToken string, from, to time.Time) (*PlatformStats, error) {
 	stats := &PlatformStats{
 		Languages:          make(map[string]int64),
 		DailyContributions: make(map[string]int),
@@ -560,14 +566,12 @@ func FetchGitLabStats(username, accessToken string) (*PlatformStats, error) {
 
 	userID := users[0].ID
 
-	// Fetch events for the last year
-	now := time.Now()
-	oneYearAgo := now.AddDate(-1, 0, 0)
+	// Fetch events for the given date range
 	page := 1
 
 	for {
 		eventsURL := fmt.Sprintf("https://gitlab.com/api/v4/users/%d/events?after=%s&before=%s&page=%d&per_page=100",
-			userID, oneYearAgo.Format("2006-01-02"), now.Format("2006-01-02"), page)
+			userID, from.Format("2006-01-02"), to.AddDate(0, 0, 1).Format("2006-01-02"), page)
 
 		eventsReq, err := http.NewRequest("GET", eventsURL, nil)
 		if err != nil {
@@ -634,9 +638,12 @@ func FetchGitLabStats(username, accessToken string) (*PlatformStats, error) {
 		page++
 	}
 
-	// Fetch languages only from projects with recent activity
-	if err = fetchGitLabLanguages(client, userID, accessToken, oneYearAgo, stats); err != nil {
-		fmt.Printf("Warning: could not fetch GitLab languages: %v\n", err)
+	// Fetch languages only from projects with recent activity.
+	// Skip language fetching in daily mode (from == to) as it is the expensive part.
+	if !from.Equal(to) {
+		if err = fetchGitLabLanguages(client, userID, accessToken, from, stats); err != nil {
+			fmt.Printf("Warning: could not fetch GitLab languages: %v\n", err)
+		}
 	}
 
 	return stats, nil
@@ -732,7 +739,7 @@ type adoProject struct {
 	Name string `json:"name"`
 }
 
-func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, error) {
+func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time) (*PlatformStats, error) {
 	stats := &PlatformStats{
 		Languages:          make(map[string]int64),
 		DailyContributions: make(map[string]int),
@@ -791,9 +798,7 @@ func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, er
 	displayName := connData.AuthenticatedUser.DisplayName
 	userID := connData.AuthenticatedUser.ID
 
-	now := time.Now()
-	oneYearAgo := now.AddDate(-1, 0, 0)
-	fromDate := oneYearAgo.Format("2006-01-02T15:04:05Z")
+	fromDate := from.Format("2006-01-02T15:04:05Z")
 
 	// Get all projects
 	var projects []adoProject
@@ -954,7 +959,7 @@ func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, er
 				if err != nil {
 					continue
 				}
-				if prDate.After(oneYearAgo) {
+				if !prDate.Before(from) {
 					stats.TotalPRsOrMRs++
 					date := prDate.Format("2006-01-02")
 					stats.DailyContributions[date]++
@@ -968,14 +973,17 @@ func FetchAzureDevOpsStats(organization, accessToken string) (*PlatformStats, er
 		}
 	}
 
-	// Fetch languages only from repos the user committed to
-	fetchAzureDevOpsLanguages(newRequest, doRequest, organization, activeRepos, stats)
+	// Fetch languages only from repos the user committed to.
+	// Skip language fetching in daily mode (from == to) as it is the expensive part.
+	if !from.Equal(to) {
+		fetchAzureDevOpsLanguages(newRequest, doRequest, organization, activeRepos, stats)
+	}
 
 	// Count work items
 	wiqlURL := fmt.Sprintf("https://dev.azure.com/%s/_apis/wit/wiql?$top=20000&api-version=7.0", url.PathEscape(organization))
 	wiqlQuery := fmt.Sprintf(
 		`{"query": "SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @Me AND [System.CreatedDate] >= '%s'"}`,
-		oneYearAgo.Format("2006-01-02"),
+		from.Format("2006-01-02"),
 	)
 	req, err = newRequest("POST", wiqlURL, strings.NewReader(wiqlQuery))
 	if err != nil {
@@ -1839,6 +1847,21 @@ func main() {
 	today := now.Format("2006-01-02")
 	currentYear := now.Year()
 
+	mode := getEnvOrDefault("RUN_MODE", "daily")
+
+	var from, to time.Time
+	todayDate := now.UTC().Truncate(24 * time.Hour)
+
+	if mode == "bootstrap" {
+		from = time.Date(todayDate.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
+		to = todayDate
+	} else {
+		from = todayDate
+		to = todayDate
+	}
+
+	fmt.Printf("Running in %s mode (from=%s, to=%s)\n", mode, from.Format("2006-01-02"), to.Format("2006-01-02"))
+
 	historyPath := getEnvOrDefault("STATS_HISTORY_PATH", "stats_history.json")
 	outputDir := getEnvOrDefault("SVG_OUTPUT_DIR", ".")
 
@@ -1866,7 +1889,7 @@ func main() {
 		fetchers++
 		go func() {
 			fmt.Println("Fetching GitHub stats...")
-			stats, err := FetchGitHubStats(ghUsername, ghToken)
+			stats, err := FetchGitHubStats(ghUsername, ghToken, from, to)
 			resultCh <- fetchResult{PlatformGitHub, stats, err}
 		}()
 	}
@@ -1877,7 +1900,7 @@ func main() {
 		fetchers++
 		go func() {
 			fmt.Println("Fetching GitLab stats...")
-			stats, err := FetchGitLabStats(glUsername, glToken)
+			stats, err := FetchGitLabStats(glUsername, glToken, from, to)
 			resultCh <- fetchResult{PlatformGitLab, stats, err}
 		}()
 	}
@@ -1888,7 +1911,7 @@ func main() {
 		fetchers++
 		go func() {
 			fmt.Println("Fetching Azure DevOps stats...")
-			stats, err := FetchAzureDevOpsStats(adoOrg, adoToken)
+			stats, err := FetchAzureDevOpsStats(adoOrg, adoToken, from, to)
 			resultCh <- fetchResult{PlatformAzureDevOps, stats, err}
 		}()
 	}
@@ -1915,6 +1938,19 @@ func main() {
 		fmt.Println("No platform credentials configured.")
 		fmt.Println("Set GITHUB_USERNAME/GH_TOKEN, GITLAB_USERNAME/GITLAB_ACCESS_TOKEN, or AZURE_DEVOPS_ORG/AZURE_DEVOPS_ACCESS_TOKEN")
 		os.Exit(1)
+	}
+
+	// In daily mode, reuse languages from the latest existing snapshot
+	if mode == "daily" && len(history.Snapshots) > 0 {
+		latest := history.Snapshots[len(history.Snapshots)-1]
+		for i, ns := range namedStats {
+			if ps, ok := latest.Platforms[ns.Platform]; ok && len(ns.Stats.Languages) == 0 {
+				namedStats[i].Stats.Languages = make(map[string]int64)
+				for lang, bytes := range ps.Languages {
+					namedStats[i].Stats.Languages[lang] = bytes
+				}
+			}
+		}
 	}
 
 	// 3. Save today's snapshot to history
