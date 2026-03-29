@@ -1038,6 +1038,7 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time)
 		// Count commits with dates
 		for _, repo := range reposResult.Value {
 			repoHadCommits := false
+			repoUserCommits := 0
 			skip := 0
 			for {
 				commitsURL := fmt.Sprintf(
@@ -1080,6 +1081,7 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time)
 				}
 
 				stats.TotalCommits += commitsResult.Count
+				repoUserCommits += commitsResult.Count
 				if commitsResult.Count > 0 {
 					repoHadCommits = true
 				}
@@ -1096,7 +1098,7 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time)
 				skip += 100
 			}
 			if repoHadCommits {
-				activeRepos = append(activeRepos, adoRepoRef{ProjectID: proj.ID, RepoID: repo.ID})
+				activeRepos = append(activeRepos, adoRepoRef{ProjectID: proj.ID, RepoID: repo.ID, UserCommits: repoUserCommits})
 			}
 		}
 
@@ -1229,8 +1231,9 @@ var extensionToLanguage = map[string]string{
 }
 
 type adoRepoRef struct {
-	ProjectID string
-	RepoID    string
+	ProjectID   string
+	RepoID      string
+	UserCommits int // commits by the authenticated user in the date range
 }
 
 func fetchAzureDevOpsLanguages(
@@ -1263,6 +1266,38 @@ func fetchAzureDevOpsLanguages(
 
 		// Strip refs/heads/ prefix for the versionDescriptor parameter
 		branch := strings.TrimPrefix(repoMeta.DefaultBranch, "refs/heads/")
+
+		// Fetch total commit count (all authors) for weighting.
+		// Use a high $top to approximate; exact count is not critical.
+		weight := 1.0
+		allCommitsURL := fmt.Sprintf(
+			"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/commits?searchCriteria.itemVersion.version=%s&$top=10000&api-version=7.0",
+			url.PathEscape(organization), url.PathEscape(ref.ProjectID), url.PathEscape(ref.RepoID),
+			url.QueryEscape(branch),
+		)
+		req, err = newRequest("GET", allCommitsURL, nil)
+		if err == nil {
+			body, statusCode, err = doRequest(req)
+			if err == nil && statusCode == http.StatusOK {
+				var allCommitsResult struct {
+					Count int `json:"count"`
+				}
+				if json.Unmarshal(body, &allCommitsResult) == nil && allCommitsResult.Count > 0 && ref.UserCommits > 0 {
+					weight = float64(ref.UserCommits) / float64(allCommitsResult.Count)
+					if weight > 1.0 {
+						weight = 1.0
+					}
+					logger.WithFields(logger.Fields{
+						"platform":     "Azure DevOps",
+						"project_id":   ref.ProjectID,
+						"repo_id":      ref.RepoID,
+						"user_commits": ref.UserCommits,
+						"all_commits":  allCommitsResult.Count,
+						"weight":       fmt.Sprintf("%.4f", weight),
+					}).Debug("computed commit-based weight for language attribution")
+				}
+			}
+		}
 
 		// Get latest commit on default branch, then fetch its detail to obtain treeId
 		commitsURL := fmt.Sprintf(
@@ -1365,7 +1400,7 @@ func fetchAzureDevOpsLanguages(
 			}
 			ext := strings.ToLower(filepath.Ext(entry.RelativePath))
 			if lang, ok := extensionToLanguage[ext]; ok {
-				stats.Languages[lang] += entry.Size
+				stats.Languages[lang] += int64(math.Round(float64(entry.Size) * weight))
 			}
 		}
 	}

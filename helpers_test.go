@@ -629,10 +629,11 @@ func TestRemoveSnapshotsForYear(t *testing.T) {
 func TestFetchAzureDevOpsLanguages(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should accumulate language bytes from tree entries", func(t *testing.T) {
+	t.Run("should accumulate weighted language bytes from tree entries", func(t *testing.T) {
 		// given
 		repoMetaJSON, _ := json.Marshal(map[string]string{"defaultBranch": "refs/heads/main"})
-		commitsJSON, _ := json.Marshal(map[string]interface{}{
+		allCommitsJSON, _ := json.Marshal(map[string]interface{}{"count": 10}) // 10 total commits
+		latestCommitJSON, _ := json.Marshal(map[string]interface{}{
 			"value": []map[string]string{{"commitId": "sha123"}},
 		})
 		commitDetailJSON, _ := json.Marshal(map[string]string{"treeId": "abc123"})
@@ -648,7 +649,7 @@ func TestFetchAzureDevOpsLanguages(t *testing.T) {
 		})
 
 		callIndex := 0
-		responses := [][]byte{repoMetaJSON, commitsJSON, commitDetailJSON, treeJSON}
+		responses := [][]byte{repoMetaJSON, allCommitsJSON, latestCommitJSON, commitDetailJSON, treeJSON}
 
 		newRequest := func(method, url string, body io.Reader) (*http.Request, error) {
 			return http.NewRequest(method, url, body)
@@ -663,25 +664,27 @@ func TestFetchAzureDevOpsLanguages(t *testing.T) {
 		}
 
 		stats := &PlatformStats{Languages: make(map[string]int64)}
-		repos := []adoRepoRef{{ProjectID: "proj1", RepoID: "repo1"}}
+		// User made 5 out of 10 total commits -> weight = 0.5
+		repos := []adoRepoRef{{ProjectID: "proj1", RepoID: "repo1", UserCommits: 5}}
 
 		// when
 		fetchAzureDevOpsLanguages(newRequest, doRequest, "myorg", repos, stats)
 
-		// then
-		assert.Equal(t, int64(8000), stats.Languages["HCL"])
-		assert.Equal(t, int64(2000), stats.Languages["TypeScript"])
-		assert.Equal(t, int64(500), stats.Languages["Markdown"])
+		// then (bytes * 0.5 weight)
+		assert.Equal(t, int64(4000), stats.Languages["HCL"])
+		assert.Equal(t, int64(1000), stats.Languages["TypeScript"])
+		assert.Equal(t, int64(250), stats.Languages["Markdown"])
 		assert.Zero(t, stats.Languages["tree"])
 	})
 
 	t.Run("should skip repos with no commits", func(t *testing.T) {
 		// given
 		repoMetaJSON, _ := json.Marshal(map[string]string{"defaultBranch": "refs/heads/main"})
+		allCommitsJSON, _ := json.Marshal(map[string]interface{}{"count": 0})
 		commitsJSON, _ := json.Marshal(map[string]interface{}{"value": []map[string]string{}})
 
 		callIndex := 0
-		responses := [][]byte{repoMetaJSON, commitsJSON}
+		responses := [][]byte{repoMetaJSON, allCommitsJSON, commitsJSON}
 
 		newRequest := func(method, url string, body io.Reader) (*http.Request, error) {
 			return http.NewRequest(method, url, body)
