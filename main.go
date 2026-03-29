@@ -593,7 +593,7 @@ func FetchGitLabStats(username, accessToken string, from, to time.Time) (*Platfo
 
 	for {
 		eventsURL := fmt.Sprintf("https://gitlab.com/api/v4/users/%d/events?after=%s&before=%s&page=%d&per_page=100",
-			userID, from.Format("2006-01-02"), to.AddDate(0, 0, 1).Format("2006-01-02"), page)
+			userID, from.AddDate(0, 0, -1).Format("2006-01-02"), to.AddDate(0, 0, 1).Format("2006-01-02"), page)
 
 		eventsReq, err := http.NewRequest("GET", eventsURL, nil)
 		if err != nil {
