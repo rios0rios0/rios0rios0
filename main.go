@@ -529,12 +529,14 @@ func fetchGitHubLanguages(client *http.Client, username, token string, repoContr
 		weight := float64(commits) / float64(totalCommits)
 
 		langURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/languages", owner, name)
-		logger.WithFields(logger.Fields{
-			"platform": "GitHub",
-			"endpoint": langURL,
-			"method":   "GET",
-			"repo":     owner + "/" + name,
-		}).Debug("fetching repository languages")
+		if logger.IsLevelEnabled(logger.DebugLevel) {
+			logger.WithFields(logger.Fields{
+				"platform": "GitHub",
+				"endpoint": langURL,
+				"method":   "GET",
+				"repo":     owner + "/" + name,
+			}).Debug("fetching repository languages")
+		}
 		langReq, err := http.NewRequest("GET", langURL, nil)
 		if err != nil {
 			continue
@@ -749,13 +751,15 @@ func fetchGitLabLanguages(client *http.Client, userID int, accessToken string, s
 	page := 1
 	for {
 		projectsURL := fmt.Sprintf("https://gitlab.com/api/v4/users/%d/projects?per_page=100&page=%d&owned=true&order_by=last_activity_at&sort=desc", userID, page)
-		logger.WithFields(logger.Fields{
-			"platform":     "GitLab",
-			"endpoint":     "users/projects",
-			"method":       "GET",
-			"page":         page,
-			"since_cutoff": since.Format("2006-01-02"),
-		}).Debug("fetching GitLab projects page for language analysis")
+		if logger.IsLevelEnabled(logger.DebugLevel) {
+			logger.WithFields(logger.Fields{
+				"platform":     "GitLab",
+				"endpoint":     "users/projects",
+				"method":       "GET",
+				"page":         page,
+				"since_cutoff": since.Format("2006-01-02"),
+			}).Debug("fetching GitLab projects page for language analysis")
+		}
 		req, err := http.NewRequest("GET", projectsURL, nil)
 		if err != nil {
 			return err
@@ -798,12 +802,14 @@ func fetchGitLabLanguages(client *http.Client, userID int, accessToken string, s
 			}
 			allTooOld = false
 			langURL := fmt.Sprintf("https://gitlab.com/api/v4/projects/%d/languages", proj.ID)
-			logger.WithFields(logger.Fields{
-				"platform":   "GitLab",
-				"endpoint":   langURL,
-				"method":     "GET",
-				"project_id": proj.ID,
-			}).Debug("fetching project languages")
+			if logger.IsLevelEnabled(logger.DebugLevel) {
+				logger.WithFields(logger.Fields{
+					"platform":   "GitLab",
+					"endpoint":   langURL,
+					"method":     "GET",
+					"project_id": proj.ID,
+				}).Debug("fetching project languages")
+			}
 			langReq, err := http.NewRequest("GET", langURL, nil)
 			if err != nil {
 				continue
@@ -1012,16 +1018,18 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time)
 					url.PathEscape(organization), url.PathEscape(proj.ID), url.PathEscape(repo.ID),
 					url.QueryEscape(displayName), url.QueryEscape(fromDate), url.QueryEscape(toDate), skip,
 				)
-				logger.WithFields(logger.Fields{
-					"platform":   "Azure DevOps",
-					"endpoint":   "commits",
-					"method":     "GET",
-					"from":       fromDate,
-					"to":         toDate,
-					"project_id": proj.ID,
-					"repo_id":    repo.ID,
-					"skip":       skip,
-				}).Debug("fetching Azure DevOps commits")
+				if logger.IsLevelEnabled(logger.DebugLevel) {
+					logger.WithFields(logger.Fields{
+						"platform":   "Azure DevOps",
+						"endpoint":   "commits",
+						"method":     "GET",
+						"from":       fromDate,
+						"to":         toDate,
+						"project_id": proj.ID,
+						"repo_id":    repo.ID,
+						"skip":       skip,
+					}).Debug("fetching Azure DevOps commits")
+				}
 				req, err := newRequest("GET", commitsURL, nil)
 				if err != nil {
 					break
@@ -2106,7 +2114,15 @@ func getEnvOrDefault(key, defaultVal string) string {
 func main() {
 	logger.SetFormatter(&logger.TextFormatter{FullTimestamp: true})
 	logger.SetOutput(os.Stdout)
-	logger.SetLevel(logger.DebugLevel)
+
+	logLevelStr := strings.ToLower(getEnvOrDefault("LOG_LEVEL", "info"))
+	if level, err := logger.ParseLevel(logLevelStr); err == nil {
+		logger.SetLevel(level)
+	} else {
+		// Fall back to info level if LOG_LEVEL is invalid
+		logger.SetLevel(logger.InfoLevel)
+		logger.WithField("LOG_LEVEL", logLevelStr).Warn("Invalid LOG_LEVEL, defaulting to info")
+	}
 
 	now := time.Now()
 	today := now.Format("2006-01-02")
