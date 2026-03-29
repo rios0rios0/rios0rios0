@@ -2,6 +2,15 @@ name: 'Bootstrap Stats'
 
 on:
   workflow_dispatch:
+    inputs:
+      log_level:
+        description: 'Log level (info or debug)'
+        required: false
+        default: 'info'
+        type: 'choice'
+        options:
+          - 'info'
+          - 'debug'
 
 jobs:
   bootstrap:
@@ -29,6 +38,7 @@ jobs:
       - name: 'Run Stats Generator (Bootstrap)'
         env:
           RUN_MODE: 'bootstrap'
+          LOG_LEVEL: ${{ inputs.log_level }}
           GITHUB_USERNAME: ${{ github.repository_owner }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GITLAB_USERNAME: ${{ secrets.GITLAB_USERNAME }}

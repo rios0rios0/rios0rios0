@@ -4,6 +4,15 @@ on:
   schedule:
     - cron: '0 0 * * *'
   workflow_dispatch:
+    inputs:
+      log_level:
+        description: 'Log level (info or debug)'
+        required: false
+        default: 'info'
+        type: 'choice'
+        options:
+          - 'info'
+          - 'debug'
 
 jobs:
   update:
@@ -31,6 +40,7 @@ jobs:
       - name: 'Run Stats Generator (Daily)'
         env:
           RUN_MODE: 'daily'
+          LOG_LEVEL: ${{ inputs.log_level || 'info' }}
           GITHUB_USERNAME: ${{ github.repository_owner }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GITLAB_USERNAME: ${{ secrets.GITLAB_USERNAME }}

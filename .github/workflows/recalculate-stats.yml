@@ -7,6 +7,14 @@ on:
         description: 'Year to recalculate (e.g. 2025)'
         required: true
         type: 'string'
+      log_level:
+        description: 'Log level (info or debug)'
+        required: false
+        default: 'info'
+        type: 'choice'
+        options:
+          - 'info'
+          - 'debug'
 
 jobs:
   recalculate:
@@ -34,6 +42,7 @@ jobs:
       - name: 'Run Stats Generator (Recalculate)'
         env:
           RUN_MODE: 'recalculate'
+          LOG_LEVEL: ${{ inputs.log_level }}
           TARGET_YEAR: ${{ github.event.inputs.year }}
           GITHUB_USERNAME: ${{ github.repository_owner }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
@@ -44,10 +53,90 @@ jobs:
         run: |
           go run main.go
 
-      - name: 'Commit and Push to stats branch'
+      - name: 'Add year section to README if missing'
+        env:
+          TARGET_YEAR: ${{ github.event.inputs.year }}
+        run: |
+          CURRENT_YEAR=$(date -u +%Y)
+          if [ "$TARGET_YEAR" = "$CURRENT_YEAR" ]; then
+            echo "Target year is current year, skipping README update"
+            exit 0
+          fi
+
+          if grep -q "<summary>${TARGET_YEAR}</summary>" README.md; then
+            echo "Year ${TARGET_YEAR} section already exists in README"
+            exit 0
+          fi
+
+          YEAR_BLOCK=$(cat <<BLOCK
+          <details>
+          	<summary>${TARGET_YEAR}</summary>
+          	<div align="center"><a><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_${TARGET_YEAR}.svg" alt="${TARGET_YEAR} combined stats" /></a><a><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/top_languages_${TARGET_YEAR}.svg" alt="${TARGET_YEAR} top languages" /></a></div>
+          	<div align="center"><a><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/contributions_${TARGET_YEAR}.svg" alt="${TARGET_YEAR} contributions" /></a></div>
+          </details>
+          BLOCK
+          )
+
+          # Insert before the first <details> block that has a year greater than TARGET_YEAR,
+          # or at the end if TARGET_YEAR is the oldest
+          python3 -c "
+          import re, sys
+
+          target = int('${TARGET_YEAR}')
+          with open('README.md', 'r') as f:
+              content = f.read()
+
+          block = '''<details>
+          \t<summary>${TARGET_YEAR}</summary>
+          \t<div align=\"center\"><a><img src=\"https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_${TARGET_YEAR}.svg\" alt=\"${TARGET_YEAR} combined stats\" /></a><a><img src=\"https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/top_languages_${TARGET_YEAR}.svg\" alt=\"${TARGET_YEAR} top languages\" /></a></div>
+          \t<div align=\"center\"><a><img src=\"https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/contributions_${TARGET_YEAR}.svg\" alt=\"${TARGET_YEAR} contributions\" /></a></div>
+          </details>'''
+
+          # Find all existing year sections and their positions
+          existing = [(int(m.group(1)), m.start()) for m in re.finditer(r'<details>\s*\n?\s*<summary>(\d{4})</summary>', content)]
+          existing.sort(key=lambda x: x[0], reverse=True)
+
+          # Find insertion point: after the last year that is greater than target (descending order)
+          insert_pos = None
+          for year_val, pos in existing:
+              if year_val > target:
+                  # Find the closing </details> for this section
+                  close = content.find('</details>', pos)
+                  if close != -1:
+                      insert_pos = close + len('</details>')
+
+          if insert_pos is None and existing:
+              # Target is newer than all existing, insert before the first details block
+              insert_pos = existing[0][1]
+              content = content[:insert_pos] + block + '\n' + content[insert_pos:]
+          elif insert_pos is not None:
+              content = content[:insert_pos] + '\n' + block + content[insert_pos:]
+          else:
+              # No existing year sections, append at end
+              content = content.rstrip() + '\n\n' + block + '\n'
+
+          with open('README.md', 'w') as f:
+              f.write(content)
+
+          print(f'Added {target} section to README.md')
+          "
+
+      - name: 'Commit README update to main'
+        env:
+          TARGET_YEAR: ${{ github.event.inputs.year }}
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          if ! git diff --quiet README.md 2>/dev/null; then
+            git add README.md
+            git commit --message "chore(readme): added ${TARGET_YEAR} collapsed year section"
+            git push origin main
+          else
+            echo "No README changes to commit"
+          fi
+
+      - name: 'Commit and Push to stats branch'
+        run: |
           git checkout --orphan stats-temp
           git reset
           git add stats_history.json combined_stats_*.svg contributions_*.svg top_languages_*.svg

@@ -313,6 +313,12 @@ func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 			langs := make(map[string]int64)
 			if entry.earliestDate == entry.latestDate {
 				// Single snapshot: use absolute values (first run)
+				logger.WithFields(logger.Fields{
+					"year":     year,
+					"platform": string(p),
+					"snapshot": entry.latestDate,
+					"method":   "absolute",
+				}).Debug("language accumulation: single snapshot")
 				for lang, bytes := range entry.latestLangs {
 					if bytes > 0 {
 						langs[lang] = bytes
@@ -320,10 +326,26 @@ func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 				}
 			} else {
 				// Multiple snapshots: compute delta
+				logger.WithFields(logger.Fields{
+					"year":     year,
+					"platform": string(p),
+					"earliest": entry.earliestDate,
+					"latest":   entry.latestDate,
+					"method":   "delta",
+				}).Debug("language accumulation: computing delta between snapshots")
 				for lang, latestBytes := range entry.latestLangs {
 					delta := latestBytes - entry.earliestLangs[lang]
 					if delta > 0 {
 						langs[lang] = delta
+					} else {
+						logger.WithFields(logger.Fields{
+							"year":     year,
+							"platform": string(p),
+							"language": lang,
+							"earliest": entry.earliestLangs[lang],
+							"latest":   latestBytes,
+							"delta":    delta,
+						}).Debug("language dropped: non-positive delta")
 					}
 				}
 				// Include new languages that only appear in latest
@@ -333,6 +355,11 @@ func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 					}
 				}
 			}
+			logger.WithFields(logger.Fields{
+				"year":      year,
+				"platform":  string(p),
+				"surviving": len(langs),
+			}).Debug("language accumulation result")
 
 			result[year] = append(result[year], NamedPlatformStats{
 				Platform: p,
@@ -2022,6 +2049,13 @@ func aggregateLanguagesByPlatform(named []NamedPlatformStats) map[string]map[Pla
 	normalizedPlatformLangs := make(map[PlatformName]map[string]int64)
 	for platform, langs := range platformLangs {
 		normalizedPlatformLangs[platform] = topNLanguagesForPlatform(langs, 5)
+		for lang, val := range normalizedPlatformLangs[platform] {
+			logger.WithFields(logger.Fields{
+				"platform":   string(platform),
+				"language":   lang,
+				"normalized": val,
+			}).Debug("normalized language (top 5, basis points)")
+		}
 	}
 
 	// Phase 3: Combine into language -> platform -> normalized value
@@ -2034,6 +2068,16 @@ func aggregateLanguagesByPlatform(named []NamedPlatformStats) map[string]map[Pla
 			result[lang][platform] = val
 		}
 	}
+
+	// Log final combined result
+	for lang, platforms := range result {
+		fields := logger.Fields{"language": lang}
+		for p, v := range platforms {
+			fields[string(p)] = v
+		}
+		logger.WithFields(fields).Debug("combined language entry for chart")
+	}
+
 	return result
 }
 
@@ -2285,6 +2329,26 @@ func main() {
 			"repos":         r.Stats.TotalRepos,
 			"languages":     len(r.Stats.Languages),
 		}).Info("platform stats fetched")
+		// Log top 5 raw languages for debugging
+		type langEntry struct {
+			name  string
+			bytes int64
+		}
+		var topLangs []langEntry
+		for lang, bytes := range r.Stats.Languages {
+			topLangs = append(topLangs, langEntry{lang, bytes})
+		}
+		sort.Slice(topLangs, func(i, j int) bool { return topLangs[i].bytes > topLangs[j].bytes })
+		if len(topLangs) > 5 {
+			topLangs = topLangs[:5]
+		}
+		for _, l := range topLangs {
+			logger.WithFields(logger.Fields{
+				"platform": string(r.Platform),
+				"language": l.name,
+				"bytes":    l.bytes,
+			}).Debug("raw language data")
+		}
 		namedStats = append(namedStats, NamedPlatformStats{r.Platform, r.Stats})
 	}
 
@@ -2355,9 +2419,19 @@ func main() {
 		stats := yearlyStats[year]
 		suffix := fmt.Sprintf("_%d.svg", year)
 
-		logger.WithFields(logger.Fields{
-			"year": year,
-		}).Info("generating SVGs")
+		// Log per-platform stats entering SVG generation
+		for _, ns := range stats {
+			logger.WithFields(logger.Fields{
+				"year":      year,
+				"platform":  string(ns.Platform),
+				"commits":   ns.Stats.TotalCommits,
+				"prs":       ns.Stats.TotalPRsOrMRs,
+				"issues":    ns.Stats.TotalIssuesOrWIs,
+				"repos":     ns.Stats.TotalRepos,
+				"languages": len(ns.Stats.Languages),
+				"contribs":  len(ns.Stats.DailyContributions),
+			}).Info("generating SVGs for year/platform")
+		}
 
 		// Combined stats
 		if err := GenerateCombinedStatsSVG(stats, filepath.Join(outputDir, "combined_stats"+suffix)); err != nil {
