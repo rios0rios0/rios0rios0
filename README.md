@@ -14,3 +14,8 @@
 	<div align="center"><a><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_2024.svg" alt="2024 combined stats" /></a><a><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/top_languages_2024.svg" alt="2024 top languages" /></a></div>
 	<div align="center"><a><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/contributions_2024.svg" alt="2024 contributions" /></a></div>
 </details>
+<details>
+	<summary>2023</summary>
+	<div align="center"><a><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_2023.svg" alt="2023 combined stats" /></a><a><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/top_languages_2023.svg" alt="2023 top languages" /></a></div>
+	<div align="center"><a><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/contributions_2023.svg" alt="2023 contributions" /></a></div>
+</details>
