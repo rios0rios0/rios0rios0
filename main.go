@@ -777,7 +777,7 @@ func FetchGitLabStats(username, accessToken string, from, to time.Time) (*Platfo
 func fetchGitLabLanguages(client *http.Client, userID int, accessToken string, since time.Time, stats *PlatformStats) error {
 	page := 1
 	for {
-		projectsURL := fmt.Sprintf("https://gitlab.com/api/v4/users/%d/projects?per_page=100&page=%d&owned=true&order_by=last_activity_at&sort=desc", userID, page)
+		projectsURL := fmt.Sprintf("https://gitlab.com/api/v4/users/%d/projects?per_page=100&page=%d&owned=true&order_by=last_activity_at&sort=desc&statistics=true", userID, page)
 		if logger.IsLevelEnabled(logger.DebugLevel) {
 			logger.WithFields(logger.Fields{
 				"platform":     "GitLab",
@@ -807,6 +807,9 @@ func fetchGitLabLanguages(client *http.Client, userID int, accessToken string, s
 		var projects []struct {
 			ID             int    `json:"id"`
 			LastActivityAt string `json:"last_activity_at"`
+			Statistics     struct {
+				RepositorySize int64 `json:"repository_size"`
+			} `json:"statistics"`
 		}
 		if err = json.Unmarshal(body, &projects); err != nil {
 			return err
@@ -853,13 +856,18 @@ func fetchGitLabLanguages(client *http.Client, userID int, accessToken string, s
 				continue
 			}
 
-			// GitLab returns percentages, convert to pseudo-bytes (multiply by 100 to keep precision)
+			// GitLab returns percentages; convert to approximate bytes using repository_size
 			var langs map[string]float64
 			if err = json.Unmarshal(langBody, &langs); err != nil {
 				continue
 			}
+			repoSize := proj.Statistics.RepositorySize
 			for lang, pct := range langs {
-				stats.Languages[lang] += int64(pct * 100)
+				if repoSize > 0 {
+					stats.Languages[lang] += int64(math.Round(float64(repoSize) * pct / 100.0))
+				} else {
+					stats.Languages[lang] += int64(pct * 100)
+				}
 			}
 		}
 
@@ -1434,15 +1442,11 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 		issueVals[ns.Platform] += int64(ns.Stats.TotalIssuesOrWIs)
 		repoVals[ns.Platform] += int64(ns.Stats.TotalRepos)
 	}
-	// Estimate LoC from platforms with real byte counts (GitHub, Azure DevOps).
-	// GitLab stores language percentages scaled by 100, not actual bytes.
+	// Estimate LoC from platforms with real byte counts (all platforms).
 	const bytesPerLine = 40
 	var realBytes int64
 	locVals := make(map[PlatformName]int64)
 	for _, ns := range platformStats {
-		if ns.Platform == PlatformGitLab {
-			continue
-		}
 		var platBytes int64
 		for _, bytes := range ns.Stats.Languages {
 			platBytes += bytes
