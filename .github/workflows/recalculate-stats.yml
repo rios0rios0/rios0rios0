@@ -134,7 +134,9 @@ jobs:
             BRANCH="chore/add-${TARGET_YEAR}-readme-section"
             mkdir -p /tmp/stats-backup
             mv stats_history.json *.svg /tmp/stats-backup/ 2>/dev/null || true
+            git reset HEAD -- stats_history.json 2>/dev/null || true
             git checkout -b "$BRANCH"
+            git reset HEAD -- . 2>/dev/null || true
             git add README.md
             git commit --message "chore(readme): added ${TARGET_YEAR} collapsed year section"
             git push --force -u origin "$BRANCH"
