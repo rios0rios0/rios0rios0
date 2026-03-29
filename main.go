@@ -1105,7 +1105,7 @@ func fetchAzureDevOpsLanguages(
 		// Strip refs/heads/ prefix for the versionDescriptor parameter
 		branch := strings.TrimPrefix(repoMeta.DefaultBranch, "refs/heads/")
 
-		// Get latest commit on default branch to obtain the root tree SHA
+		// Get latest commit on default branch, then fetch its detail to obtain treeId
 		commitsURL := fmt.Sprintf(
 			"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/commits?searchCriteria.itemVersion.version=%s&$top=1&api-version=7.0",
 			url.PathEscape(organization), url.PathEscape(ref.ProjectID), url.PathEscape(ref.RepoID),
@@ -1123,14 +1123,39 @@ func fetchAzureDevOpsLanguages(
 
 		var commitsResult struct {
 			Value []struct {
-				TreeID string `json:"treeId"`
+				CommitID string `json:"commitId"`
 			} `json:"value"`
 		}
-		if err = json.Unmarshal(body, &commitsResult); err != nil || len(commitsResult.Value) == 0 || commitsResult.Value[0].TreeID == "" {
+		if err = json.Unmarshal(body, &commitsResult); err != nil || len(commitsResult.Value) == 0 || commitsResult.Value[0].CommitID == "" {
 			continue
 		}
 
-		treeID := commitsResult.Value[0].TreeID
+		commitID := commitsResult.Value[0].CommitID
+
+		// Fetch individual commit detail to get treeId (not available in list response)
+		commitURL := fmt.Sprintf(
+			"https://dev.azure.com/%s/%s/_apis/git/repositories/%s/commits/%s?api-version=7.0",
+			url.PathEscape(organization), url.PathEscape(ref.ProjectID), url.PathEscape(ref.RepoID),
+			url.PathEscape(commitID),
+		)
+		req, err = newRequest("GET", commitURL, nil)
+		if err != nil {
+			continue
+		}
+
+		body, statusCode, err = doRequest(req)
+		if err != nil || statusCode != http.StatusOK {
+			continue
+		}
+
+		var commitDetail struct {
+			TreeID string `json:"treeId"`
+		}
+		if err = json.Unmarshal(body, &commitDetail); err != nil || commitDetail.TreeID == "" {
+			continue
+		}
+
+		treeID := commitDetail.TreeID
 
 		// Fetch the full tree with file sizes (byte counts)
 		treeURL := fmt.Sprintf(

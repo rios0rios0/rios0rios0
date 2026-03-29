@@ -633,8 +633,9 @@ func TestFetchAzureDevOpsLanguages(t *testing.T) {
 		// given
 		repoMetaJSON, _ := json.Marshal(map[string]string{"defaultBranch": "refs/heads/main"})
 		commitsJSON, _ := json.Marshal(map[string]interface{}{
-			"value": []map[string]string{{"treeId": "abc123"}},
+			"value": []map[string]string{{"commitId": "sha123"}},
 		})
+		commitDetailJSON, _ := json.Marshal(map[string]string{"treeId": "abc123"})
 		treeJSON, _ := json.Marshal(map[string]interface{}{
 			"truncated": false,
 			"treeEntries": []map[string]interface{}{
@@ -647,7 +648,7 @@ func TestFetchAzureDevOpsLanguages(t *testing.T) {
 		})
 
 		callIndex := 0
-		responses := [][]byte{repoMetaJSON, commitsJSON, treeJSON}
+		responses := [][]byte{repoMetaJSON, commitsJSON, commitDetailJSON, treeJSON}
 
 		newRequest := func(method, url string, body io.Reader) (*http.Request, error) {
 			return http.NewRequest(method, url, body)
