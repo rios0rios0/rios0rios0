@@ -1399,14 +1399,13 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 		issueVals[ns.Platform] += int64(ns.Stats.TotalIssuesOrWIs)
 		repoVals[ns.Platform] += int64(ns.Stats.TotalRepos)
 	}
-	// Estimate LoC only from platforms with real byte counts (GitHub only).
+	// Estimate LoC from platforms with real byte counts (GitHub, Azure DevOps).
 	// GitLab stores language percentages scaled by 100, not actual bytes.
-	// Azure DevOps stores file counts, not bytes.
 	const bytesPerLine = 40
 	var realBytes int64
 	locVals := make(map[PlatformName]int64)
 	for _, ns := range platformStats {
-		if ns.Platform == PlatformGitLab || ns.Platform == PlatformAzureDevOps {
+		if ns.Platform == PlatformGitLab {
 			continue
 		}
 		var platBytes int64
