@@ -132,7 +132,8 @@ jobs:
             echo "No README changes, skipping PR"
           else
             BRANCH="chore/add-${TARGET_YEAR}-readme-section"
-            git stash -- stats_history.json *.svg 2>/dev/null || true
+            mkdir -p /tmp/stats-backup
+            mv stats_history.json *.svg /tmp/stats-backup/ 2>/dev/null || true
             git checkout -b "$BRANCH"
             git add README.md
             git commit --message "chore(readme): added ${TARGET_YEAR} collapsed year section"
@@ -143,7 +144,7 @@ jobs:
               --base main \
               --head "$BRANCH"
             git checkout main
-            git stash pop 2>/dev/null || true
+            mv /tmp/stats-backup/* . 2>/dev/null || true
           fi
 
       - name: 'Commit and Push to stats branch'
