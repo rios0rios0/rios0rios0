@@ -32,6 +32,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 - fixed contribution and token heatmaps to always render full-year width for consistent sizing
 - changed language fetching to only include repos with activity in the last year (GitHub: `pushed_at`, GitLab: `last_activity_at`)
 - changed `accumulateByYear` to merge languages across all snapshots (max bytes per language) instead of only keeping the latest snapshot
+- changed the Go module dependencies to their latest versions
 
 ### Removed
 
