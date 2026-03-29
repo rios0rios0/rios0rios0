@@ -2137,7 +2137,7 @@ func getEnvOrDefault(key, defaultVal string) string {
 }
 
 func main() {
-	logger.SetFormatter(&logger.TextFormatter{FullTimestamp: true})
+	logger.SetFormatter(&logger.TextFormatter{ForceColors: true, FullTimestamp: true})
 	logger.SetOutput(os.Stdout)
 
 	logLevelStr := strings.ToLower(getEnvOrDefault("LOG_LEVEL", "info"))
@@ -2317,7 +2317,9 @@ func main() {
 
 	// 3. Save snapshot to history
 	snapshotDate := today
-	if mode == "recalculate" {
+	if mode == "bootstrap" {
+		removeSnapshotsForYear(history, currentYear)
+	} else if mode == "recalculate" {
 		removeSnapshotsForYear(history, targetYear)
 		snapshotDate = to.Format("2006-01-02")
 	}
