@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	logger "github.com/sirupsen/logrus"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 )
@@ -352,12 +353,27 @@ func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 // --- GitHub ---
 
 func FetchGitHubStats(username, token string, from, to time.Time) (*PlatformStats, error) {
+	start := time.Now()
+	defer func() {
+		logger.WithFields(logger.Fields{
+			"platform": "GitHub",
+			"elapsed":  time.Since(start).String(),
+		}).Debug("platform fetch completed")
+	}()
+
 	stats := &PlatformStats{
 		Languages:          make(map[string]int64),
 		DailyContributions: make(map[string]int),
 	}
 
 	// Use GraphQL API for contributions + repos committed to
+	logger.WithFields(logger.Fields{
+		"platform": "GitHub",
+		"endpoint": "https://api.github.com/graphql",
+		"method":   "POST",
+		"from":     from.Format(time.RFC3339),
+		"to":       to.Format(time.RFC3339),
+	}).Debug("calling GitHub GraphQL API for contributions")
 	query := fmt.Sprintf(`{
 		"query": "query { user(login: \"%s\") { contributionsCollection(from: \"%s\", to: \"%s\") { totalCommitContributions totalPullRequestContributions totalIssueContributions contributionCalendar { weeks { contributionDays { date contributionCount } } } commitContributionsByRepository(maxRepositories: 100) { contributions { totalCount } repository { name owner { login } isPrivate } } } repositories(first: 100, ownerAffiliations: OWNER, isFork: false, privacy: PUBLIC) { totalCount } } }"
 	}`, username, from.Format(time.RFC3339), to.Format(time.RFC3339))
@@ -449,7 +465,12 @@ func FetchGitHubStats(username, token string, from, to time.Time) (*PlatformStat
 			}
 		}
 	}
-	fmt.Printf("[GitHub] API returned contributions: %d days with data, range %s to %s\n", totalDaysWithContribs, minDate, maxDate)
+	logger.WithFields(logger.Fields{
+		"platform":         "GitHub",
+		"days_with_data":   totalDaysWithContribs,
+		"data_range_start": minDate,
+		"data_range_end":   maxDate,
+	}).Debug("GitHub contributions parsed")
 
 	// Fetch languages weighted by commit activity in the contribution period.
 	// commitContributionsByRepository gives repos the user actually committed to,
@@ -468,7 +489,10 @@ func FetchGitHubStats(username, token string, from, to time.Time) (*PlatformStat
 			repoContribs = append(repoContribs, entry)
 		}
 		if err = fetchGitHubLanguages(client, username, token, repoContribs, stats); err != nil {
-			fmt.Printf("Warning: could not fetch GitHub languages: %v\n", err)
+			logger.WithFields(logger.Fields{
+				"platform": "GitHub",
+				"error":    err.Error(),
+			}).Warn("could not fetch languages")
 		}
 	}
 
@@ -505,6 +529,12 @@ func fetchGitHubLanguages(client *http.Client, username, token string, repoContr
 		weight := float64(commits) / float64(totalCommits)
 
 		langURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/languages", owner, name)
+		logger.WithFields(logger.Fields{
+			"platform": "GitHub",
+			"endpoint": langURL,
+			"method":   "GET",
+			"repo":     owner + "/" + name,
+		}).Debug("fetching repository languages")
 		langReq, err := http.NewRequest("GET", langURL, nil)
 		if err != nil {
 			continue
@@ -545,6 +575,14 @@ func fetchGitHubLanguages(client *http.Client, username, token string, repoContr
 // --- GitLab ---
 
 func FetchGitLabStats(username, accessToken string, from, to time.Time) (*PlatformStats, error) {
+	start := time.Now()
+	defer func() {
+		logger.WithFields(logger.Fields{
+			"platform": "GitLab",
+			"elapsed":  time.Since(start).String(),
+		}).Debug("platform fetch completed")
+	}()
+
 	stats := &PlatformStats{
 		Languages:          make(map[string]int64),
 		DailyContributions: make(map[string]int),
@@ -554,6 +592,12 @@ func FetchGitLabStats(username, accessToken string, from, to time.Time) (*Platfo
 
 	// Fetch user ID
 	userURL := fmt.Sprintf("https://gitlab.com/api/v4/users?username=%s", username)
+	logger.WithFields(logger.Fields{
+		"platform": "GitLab",
+		"endpoint": userURL,
+		"method":   "GET",
+		"username": username,
+	}).Debug("looking up GitLab user ID")
 	req, err := http.NewRequest("GET", userURL, nil)
 	if err != nil {
 		return nil, err
@@ -592,9 +636,19 @@ func FetchGitLabStats(username, accessToken string, from, to time.Time) (*Platfo
 	page := 1
 
 	for {
+		afterParam := from.AddDate(0, 0, -1).Format("2006-01-02")
+		beforeParam := to.AddDate(0, 0, 1).Format("2006-01-02")
 		eventsURL := fmt.Sprintf("https://gitlab.com/api/v4/users/%d/events?after=%s&before=%s&page=%d&per_page=100",
-			userID, from.AddDate(0, 0, -1).Format("2006-01-02"), to.AddDate(0, 0, 1).Format("2006-01-02"), page)
+			userID, afterParam, beforeParam, page)
 
+		logger.WithFields(logger.Fields{
+			"platform": "GitLab",
+			"endpoint": "users/events",
+			"method":   "GET",
+			"after":    afterParam,
+			"before":   beforeParam,
+			"page":     page,
+		}).Debug("fetching GitLab events page")
 		eventsReq, err := http.NewRequest("GET", eventsURL, nil)
 		if err != nil {
 			return nil, err
@@ -670,13 +724,21 @@ func FetchGitLabStats(username, accessToken string, from, to time.Time) (*Platfo
 			glMax = date
 		}
 	}
-	fmt.Printf("[GitLab] Contributions: %d days with data, range %s to %s\n", len(stats.DailyContributions), glMin, glMax)
+	logger.WithFields(logger.Fields{
+		"platform":         "GitLab",
+		"days_with_data":   len(stats.DailyContributions),
+		"data_range_start": glMin,
+		"data_range_end":   glMax,
+	}).Debug("GitLab contributions parsed")
 
 	// Fetch languages only from projects with recent activity.
 	// Skip language fetching in daily mode (from == to) as it is the expensive part.
 	if !from.Equal(to) {
 		if err = fetchGitLabLanguages(client, userID, accessToken, from, stats); err != nil {
-			fmt.Printf("Warning: could not fetch GitLab languages: %v\n", err)
+			logger.WithFields(logger.Fields{
+				"platform": "GitLab",
+				"error":    err.Error(),
+			}).Warn("could not fetch languages")
 		}
 	}
 
@@ -687,6 +749,13 @@ func fetchGitLabLanguages(client *http.Client, userID int, accessToken string, s
 	page := 1
 	for {
 		projectsURL := fmt.Sprintf("https://gitlab.com/api/v4/users/%d/projects?per_page=100&page=%d&owned=true&order_by=last_activity_at&sort=desc", userID, page)
+		logger.WithFields(logger.Fields{
+			"platform":     "GitLab",
+			"endpoint":     "users/projects",
+			"method":       "GET",
+			"page":         page,
+			"since_cutoff": since.Format("2006-01-02"),
+		}).Debug("fetching GitLab projects page for language analysis")
 		req, err := http.NewRequest("GET", projectsURL, nil)
 		if err != nil {
 			return err
@@ -729,6 +798,12 @@ func fetchGitLabLanguages(client *http.Client, userID int, accessToken string, s
 			}
 			allTooOld = false
 			langURL := fmt.Sprintf("https://gitlab.com/api/v4/projects/%d/languages", proj.ID)
+			logger.WithFields(logger.Fields{
+				"platform":   "GitLab",
+				"endpoint":   langURL,
+				"method":     "GET",
+				"project_id": proj.ID,
+			}).Debug("fetching project languages")
 			langReq, err := http.NewRequest("GET", langURL, nil)
 			if err != nil {
 				continue
@@ -774,6 +849,14 @@ type adoProject struct {
 }
 
 func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time) (*PlatformStats, error) {
+	start := time.Now()
+	defer func() {
+		logger.WithFields(logger.Fields{
+			"platform": "Azure DevOps",
+			"elapsed":  time.Since(start).String(),
+		}).Debug("platform fetch completed")
+	}()
+
 	stats := &PlatformStats{
 		Languages:          make(map[string]int64),
 		DailyContributions: make(map[string]int),
@@ -806,6 +889,11 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time)
 
 	// Get authenticated user info
 	connURL := fmt.Sprintf("https://dev.azure.com/%s/_apis/connectionData?api-version=7.0-preview", url.PathEscape(organization))
+	logger.WithFields(logger.Fields{
+		"platform": "Azure DevOps",
+		"endpoint": connURL,
+		"method":   "GET",
+	}).Debug("fetching Azure DevOps connection data")
 	req, err := newRequest("GET", connURL, nil)
 	if err != nil {
 		return nil, err
@@ -845,6 +933,11 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time)
 			projectsURL += "&continuationToken=" + url.QueryEscape(continuationToken)
 		}
 
+		logger.WithFields(logger.Fields{
+			"platform": "Azure DevOps",
+			"endpoint": "projects",
+			"method":   "GET",
+		}).Debug("fetching Azure DevOps projects page")
 		req, err := newRequest("GET", projectsURL, nil)
 		if err != nil {
 			return nil, err
@@ -919,6 +1012,16 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time)
 					url.PathEscape(organization), url.PathEscape(proj.ID), url.PathEscape(repo.ID),
 					url.QueryEscape(displayName), url.QueryEscape(fromDate), url.QueryEscape(toDate), skip,
 				)
+				logger.WithFields(logger.Fields{
+					"platform":   "Azure DevOps",
+					"endpoint":   "commits",
+					"method":     "GET",
+					"from":       fromDate,
+					"to":         toDate,
+					"project_id": proj.ID,
+					"repo_id":    repo.ID,
+					"skip":       skip,
+				}).Debug("fetching Azure DevOps commits")
 				req, err := newRequest("GET", commitsURL, nil)
 				if err != nil {
 					break
@@ -969,6 +1072,15 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time)
 				"https://dev.azure.com/%s/%s/_apis/git/pullrequests?searchCriteria.creatorId=%s&searchCriteria.status=all&$top=100&$skip=%d&api-version=7.0",
 				url.PathEscape(organization), url.PathEscape(proj.ID), url.PathEscape(userID), skip,
 			)
+			logger.WithFields(logger.Fields{
+				"platform":    "Azure DevOps",
+				"endpoint":    "pullrequests",
+				"method":      "GET",
+				"filter_from": from.Format(time.RFC3339),
+				"filter_to":   to.Format(time.RFC3339),
+				"project_id":  proj.ID,
+				"skip":        skip,
+			}).Debug("fetching Azure DevOps pull requests")
 			req, err := newRequest("GET", prsURL, nil)
 			if err != nil {
 				break
@@ -1020,6 +1132,13 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time)
 		`{"query": "SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @Me AND [System.CreatedDate] >= '%s' AND [System.CreatedDate] <= '%s'"}`,
 		from.Format("2006-01-02"), to.Format("2006-01-02"),
 	)
+	logger.WithFields(logger.Fields{
+		"platform": "Azure DevOps",
+		"endpoint": wiqlURL,
+		"method":   "POST",
+		"from":     from.Format("2006-01-02"),
+		"to":       to.Format("2006-01-02"),
+	}).Debug("querying Azure DevOps work items via WIQL")
 	req, err = newRequest("POST", wiqlURL, strings.NewReader(wiqlQuery))
 	if err != nil {
 		return nil, err
@@ -1048,7 +1167,12 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time)
 			adoMax = date
 		}
 	}
-	fmt.Printf("[AzureDevOps] Contributions: %d days with data, range %s to %s\n", len(stats.DailyContributions), adoMin, adoMax)
+	logger.WithFields(logger.Fields{
+		"platform":         "Azure DevOps",
+		"days_with_data":   len(stats.DailyContributions),
+		"data_range_start": adoMin,
+		"data_range_end":   adoMax,
+	}).Debug("Azure DevOps contributions parsed")
 
 	return stats, nil
 }
@@ -1138,6 +1262,13 @@ func fetchAzureDevOpsLanguages(
 			url.PathEscape(organization), url.PathEscape(ref.ProjectID), url.PathEscape(ref.RepoID),
 			url.PathEscape(treeID),
 		)
+		logger.WithFields(logger.Fields{
+			"platform":   "Azure DevOps",
+			"endpoint":   "trees",
+			"method":     "GET",
+			"project_id": ref.ProjectID,
+			"repo_id":    ref.RepoID,
+		}).Debug("fetching repository tree for language analysis")
 		req, err = newRequest("GET", treeURL, nil)
 		if err != nil {
 			continue
@@ -1161,8 +1292,11 @@ func fetchAzureDevOpsLanguages(
 		}
 
 		if treeResult.Truncated {
-			fmt.Printf("[AzureDevOps] Warning: tree truncated for repo %s/%s, language data may be incomplete\n",
-				ref.ProjectID, ref.RepoID)
+			logger.WithFields(logger.Fields{
+				"platform":   "Azure DevOps",
+				"project_id": ref.ProjectID,
+				"repo_id":    ref.RepoID,
+			}).Warn("tree truncated, language data may be incomplete")
 		}
 
 		for _, entry := range treeResult.TreeEntries {
@@ -1970,6 +2104,10 @@ func getEnvOrDefault(key, defaultVal string) string {
 }
 
 func main() {
+	logger.SetFormatter(&logger.TextFormatter{FullTimestamp: true})
+	logger.SetOutput(os.Stdout)
+	logger.SetLevel(logger.DebugLevel)
+
 	now := time.Now()
 	today := now.Format("2006-01-02")
 	currentYear := now.Year()
@@ -1987,14 +2125,16 @@ func main() {
 	} else if mode == "recalculate" {
 		targetYearStr := os.Getenv("TARGET_YEAR")
 		if targetYearStr == "" {
-			fmt.Fprintln(os.Stderr, "Error: TARGET_YEAR is required for recalculate mode")
-			os.Exit(1)
+			logger.Fatal("TARGET_YEAR is required for recalculate mode")
 		}
 		parsed, err := strconv.Atoi(strings.TrimSpace(targetYearStr))
 		targetYear = parsed
 		if err != nil || targetYear < 2000 || targetYear > todayDate.Year() {
-			fmt.Fprintf(os.Stderr, "Error: TARGET_YEAR must be between 2000 and %d, got: %s\n", todayDate.Year(), targetYearStr)
-			os.Exit(1)
+			logger.WithFields(logger.Fields{
+				"min_year":    2000,
+				"max_year":    todayDate.Year(),
+				"target_year": targetYearStr,
+			}).Fatal("TARGET_YEAR is out of valid range")
 		}
 		from = time.Date(targetYear, 1, 1, 0, 0, 0, 0, time.UTC)
 		if targetYear == todayDate.Year() {
@@ -2007,15 +2147,25 @@ func main() {
 		to = nowUTC
 	}
 
-	fmt.Printf("Running in %s mode (from=%s, to=%s)\n", mode, from.Format(time.RFC3339), to.Format(time.RFC3339))
+	logger.WithFields(logger.Fields{
+		"mode": mode,
+		"from": from.Format(time.RFC3339),
+		"to":   to.Format(time.RFC3339),
+	}).Info("starting stats generation")
 
 	historyPath := getEnvOrDefault("STATS_HISTORY_PATH", "stats_history.json")
 	outputDir := getEnvOrDefault("SVG_OUTPUT_DIR", ".")
 
 	// 1. Load existing history
+	logger.WithFields(logger.Fields{
+		"path": historyPath,
+	}).Info("loading stats history")
 	history, err := loadStatsHistory(historyPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not load history from %s: %v\n", historyPath, err)
+		logger.WithFields(logger.Fields{
+			"path":  historyPath,
+			"error": err.Error(),
+		}).Warn("could not load history, creating new history file")
 		historyPath = historyPath + ".new"
 		history = &StatsHistory{Version: 1}
 	}
@@ -2029,13 +2179,18 @@ func main() {
 
 	resultCh := make(chan fetchResult, 3)
 	fetchers := 0
+	fetchStart := time.Now()
 
 	ghUsername := os.Getenv("GITHUB_USERNAME")
 	ghToken := os.Getenv("GH_TOKEN")
 	if ghUsername != "" && ghToken != "" {
 		fetchers++
 		go func() {
-			fmt.Println("Fetching GitHub stats...")
+			logger.WithFields(logger.Fields{
+				"platform": "GitHub",
+				"from":     from.Format(time.RFC3339),
+				"to":       to.Format(time.RFC3339),
+			}).Info("fetching platform stats")
 			stats, err := FetchGitHubStats(ghUsername, ghToken, from, to)
 			resultCh <- fetchResult{PlatformGitHub, stats, err}
 		}()
@@ -2046,7 +2201,11 @@ func main() {
 	if glUsername != "" && glToken != "" {
 		fetchers++
 		go func() {
-			fmt.Println("Fetching GitLab stats...")
+			logger.WithFields(logger.Fields{
+				"platform": "GitLab",
+				"from":     from.Format(time.RFC3339),
+				"to":       to.Format(time.RFC3339),
+			}).Info("fetching platform stats")
 			stats, err := FetchGitLabStats(glUsername, glToken, from, to)
 			resultCh <- fetchResult{PlatformGitLab, stats, err}
 		}()
@@ -2057,7 +2216,11 @@ func main() {
 	if adoOrg != "" && adoToken != "" {
 		fetchers++
 		go func() {
-			fmt.Println("Fetching Azure DevOps stats...")
+			logger.WithFields(logger.Fields{
+				"platform": "Azure DevOps",
+				"from":     from.Format(time.RFC3339),
+				"to":       to.Format(time.RFC3339),
+			}).Info("fetching platform stats")
 			stats, err := FetchAzureDevOpsStats(adoOrg, adoToken, from, to)
 			resultCh <- fetchResult{PlatformAzureDevOps, stats, err}
 		}()
@@ -2067,24 +2230,30 @@ func main() {
 	for i := 0; i < fetchers; i++ {
 		r := <-resultCh
 		if r.Err != nil {
-			fmt.Printf("Warning: skipping %s — %v\n", r.Platform, r.Err)
+			logger.WithFields(logger.Fields{
+				"platform": string(r.Platform),
+				"error":    r.Err.Error(),
+			}).Warn("skipping platform due to fetch error")
 			continue
 		}
-		switch r.Platform {
-		case PlatformGitHub:
-			fmt.Printf("GitHub: %d commits, %d PRs, %d issues\n", r.Stats.TotalCommits, r.Stats.TotalPRsOrMRs, r.Stats.TotalIssuesOrWIs)
-		case PlatformGitLab:
-			fmt.Printf("GitLab: %d commits, %d MRs, %d issues\n", r.Stats.TotalCommits, r.Stats.TotalPRsOrMRs, r.Stats.TotalIssuesOrWIs)
-		case PlatformAzureDevOps:
-			fmt.Printf("Azure DevOps: %d commits, %d PRs, %d work items\n", r.Stats.TotalCommits, r.Stats.TotalPRsOrMRs, r.Stats.TotalIssuesOrWIs)
-		}
+		logger.WithFields(logger.Fields{
+			"platform":      string(r.Platform),
+			"commits":       r.Stats.TotalCommits,
+			"prs_or_mrs":    r.Stats.TotalPRsOrMRs,
+			"issues_or_wis": r.Stats.TotalIssuesOrWIs,
+			"repos":         r.Stats.TotalRepos,
+			"languages":     len(r.Stats.Languages),
+		}).Info("platform stats fetched")
 		namedStats = append(namedStats, NamedPlatformStats{r.Platform, r.Stats})
 	}
 
+	logger.WithFields(logger.Fields{
+		"elapsed":   time.Since(fetchStart).String(),
+		"platforms": len(namedStats),
+	}).Info("all platform fetches completed")
+
 	if len(namedStats) == 0 {
-		fmt.Println("No platform credentials configured.")
-		fmt.Println("Set GITHUB_USERNAME/GH_TOKEN, GITLAB_USERNAME/GITLAB_ACCESS_TOKEN, or AZURE_DEVOPS_ORG/AZURE_DEVOPS_ACCESS_TOKEN")
-		os.Exit(1)
+		logger.Fatal("no platform credentials configured; set GITHUB_USERNAME/GH_TOKEN, GITLAB_USERNAME/GITLAB_ACCESS_TOKEN, or AZURE_DEVOPS_ORG/AZURE_DEVOPS_ACCESS_TOKEN")
 	}
 
 	// In daily mode, reuse languages from the latest existing snapshot
@@ -2111,14 +2280,24 @@ func main() {
 		removeSnapshotsForYear(history, targetYear)
 		snapshotDate = to.Format("2006-01-02")
 	}
+	logger.WithFields(logger.Fields{
+		"date": snapshotDate,
+		"mode": mode,
+	}).Info("saving snapshot to history")
 	addSnapshot(history, snapshotDate, namedStats)
 	if err := saveStatsHistory(history, historyPath); err != nil {
-		fmt.Printf("Error saving history: %v\n", err)
-		os.Exit(1)
+		logger.WithFields(logger.Fields{
+			"path":  historyPath,
+			"error": err.Error(),
+		}).Fatal("failed to save stats history")
 	}
-	fmt.Printf("Saved snapshot for %s to %s\n", snapshotDate, historyPath)
+	logger.WithFields(logger.Fields{
+		"date": snapshotDate,
+		"path": historyPath,
+	}).Info("saved snapshot to history")
 
 	// 4. Build per-year accumulated data
+	logger.Info("accumulating per-year stats from history")
 	yearlyStats := accumulateByYear(history)
 	var years []int
 	for y := range yearlyStats {
@@ -2127,16 +2306,23 @@ func main() {
 	sort.Ints(years)
 
 	// 5. Generate per-year SVGs
+	svgStart := time.Now()
 	hadErrors := false
 	for _, year := range years {
 		stats := yearlyStats[year]
 		suffix := fmt.Sprintf("_%d.svg", year)
 
-		fmt.Printf("Generating SVGs for %d...\n", year)
+		logger.WithFields(logger.Fields{
+			"year": year,
+		}).Info("generating SVGs")
 
 		// Combined stats
 		if err := GenerateCombinedStatsSVG(stats, filepath.Join(outputDir, "combined_stats"+suffix)); err != nil {
-			fmt.Printf("Error generating combined stats SVG for %d: %v\n", year, err)
+			logger.WithFields(logger.Fields{
+				"year":  year,
+				"chart": "combined_stats",
+				"error": err.Error(),
+			}).Error("failed to generate SVG")
 			hadErrors = true
 		}
 
@@ -2146,10 +2332,18 @@ func main() {
 			errMsg := err.Error()
 			if strings.Contains(errMsg, "no language data") || strings.Contains(errMsg, "all language byte counts are zero") {
 				// Expected "no data" condition: warn and continue without marking a hard error.
-				fmt.Printf("Warning: skipping languages chart for %d: %v\n", year, err)
+				logger.WithFields(logger.Fields{
+					"year":  year,
+					"chart": "top_languages",
+					"error": err.Error(),
+				}).Warn("skipping chart due to missing data")
 			} else {
 				// Unexpected failure (e.g., file I/O, template, logic): treat as an error.
-				fmt.Printf("Error generating languages chart for %d: %v\n", year, err)
+				logger.WithFields(logger.Fields{
+					"year":  year,
+					"chart": "top_languages",
+					"error": err.Error(),
+				}).Error("failed to generate SVG")
 				hadErrors = true
 			}
 		}
@@ -2160,34 +2354,54 @@ func main() {
 		startDate = time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)
 		endDate = time.Date(year, 12, 31, 23, 59, 59, 0, time.UTC)
 		if err := GenerateContributionHeatmap(contribsByPlatform, startDate, endDate, filepath.Join(outputDir, "contributions"+suffix)); err != nil {
-			fmt.Printf("Error generating contribution heatmap for %d: %v\n", year, err)
+			logger.WithFields(logger.Fields{
+				"year":  year,
+				"chart": "contributions",
+				"error": err.Error(),
+			}).Error("failed to generate SVG")
 			hadErrors = true
 		}
 	}
 
 	// 6. Copy current year SVGs to _final.svg for backward compatibility
+	logger.WithFields(logger.Fields{
+		"year": currentYear,
+	}).Info("copying current year SVGs to backward-compatibility _final files")
 	for _, base := range []string{"combined_stats", "top_languages", "contributions"} {
 		src := filepath.Join(outputDir, fmt.Sprintf("%s_%d.svg", base, currentYear))
 		dst := filepath.Join(outputDir, base+"_final.svg")
 
 		data, err := os.ReadFile(src)
 		if err != nil {
-			fmt.Printf("Warning: could not read %s for backward-compatibility copy: %v\n", src, err)
+			logger.WithFields(logger.Fields{
+				"source": src,
+				"error":  err.Error(),
+			}).Warn("could not read SVG for backward-compatibility copy")
 			continue
 		}
 		if err := os.WriteFile(dst, data, 0644); err != nil {
-			fmt.Printf("Error writing backward-compatibility file %s: %v\n", dst, err)
+			logger.WithFields(logger.Fields{
+				"destination": dst,
+				"error":       err.Error(),
+			}).Error("failed to write backward-compatibility file")
 			hadErrors = true
 		}
 	}
 
+	logger.WithFields(logger.Fields{
+		"elapsed": time.Since(svgStart).String(),
+		"years":   len(years),
+	}).Info("SVG generation completed")
+
 	// 7. Generate Claude Code tokens heatmap (not year-based)
 	tokenData, err := loadTokenUsage("claude_tokens.json")
 	if err != nil {
-		fmt.Printf("Warning: could not load Claude Code token data: %v (generating empty heatmap)\n", err)
+		logger.WithFields(logger.Fields{
+			"error": err.Error(),
+		}).Warn("could not load Claude Code token data, generating empty graph")
 		tokenData = []TokenUsage{}
 	}
-	fmt.Println("Generating Claude Code tokens graph...")
+	logger.Info("generating Claude Code tokens graph")
 	if len(tokenData) == 0 {
 		// Generate empty placeholder SVG
 		emptySvg := `<svg xmlns="http://www.w3.org/2000/svg" width="893" height="207" viewBox="0 0 893 207">
@@ -2199,13 +2413,14 @@ func main() {
 		os.WriteFile(filepath.Join(outputDir, "claude_tokens_final.svg"), []byte(emptySvg), 0644)
 	} else {
 		if err = GenerateTokensHeatmap(tokenData, filepath.Join(outputDir, "claude_tokens_final.svg")); err != nil {
-			fmt.Printf("Error generating tokens graph: %v\n", err)
+			logger.WithFields(logger.Fields{
+				"error": err.Error(),
+			}).Error("failed to generate tokens graph")
 		}
 	}
 
 	if hadErrors {
-		fmt.Println("SVG generation completed with errors.")
-		os.Exit(1)
+		logger.Fatal("SVG generation completed with errors")
 	}
-	fmt.Println("All SVGs generated successfully!")
+	logger.Info("all SVGs generated successfully")
 }
