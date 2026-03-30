@@ -16,23 +16,28 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-30
+
 ### Added
 
-- added `recalculate` workflow mode with `workflow_dispatch` to re-fetch and replace stats for a specific year
-- added unit tests for SVG generators with XML validation (22 test cases)
-- added unit tests for helper functions (`formatNumber`, `mergeContributions`, `mergeLanguages`)
 - added `Makefile` with `test` and `generate` targets
+- added `recalculate` workflow mode with `workflow_dispatch` to re-fetch and replace stats for a specific year
 - added Azure DevOps language detection via file extension analysis from repo trees
 - added parallel platform fetching using goroutines for faster execution
+- added unit tests for helper functions (`formatNumber`, `mergeContributions`, `mergeLanguages`)
+- added unit tests for SVG generators with XML validation (22 test cases)
 
 ### Changed
 
+- changed `accumulateByYear` to merge languages across all snapshots (max bytes per language) instead of only keeping the latest snapshot
+- changed language fetching to only include repos with activity in the last year (GitHub: `pushed_at`, GitLab: `last_activity_at`)
+- changed the Go module dependencies to their latest versions
 - refactored SVG generators to separate rendering logic from file I/O for testability
+
+### Fixed
+
 - fixed Azure DevOps connection data API version to use `7.0-preview`
 - fixed contribution and token heatmaps to always render full-year width for consistent sizing
-- changed language fetching to only include repos with activity in the last year (GitHub: `pushed_at`, GitLab: `last_activity_at`)
-- changed `accumulateByYear` to merge languages across all snapshots (max bytes per language) instead of only keeping the latest snapshot
-- changed the Go module dependencies to their latest versions
 
 ### Removed
 
