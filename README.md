@@ -44,3 +44,8 @@
 	<div align="center"><a><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_2018.svg" alt="2018 combined stats" /></a><a><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/top_languages_2018.svg" alt="2018 top languages" /></a></div>
 	<div align="center"><a><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/contributions_2018.svg" alt="2018 contributions" /></a></div>
 </details>
+<details>
+	<summary>2017</summary>
+	<div align="center"><a><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_2017.svg" alt="2017 combined stats" /></a><a><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/top_languages_2017.svg" alt="2017 top languages" /></a></div>
+	<div align="center"><a><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/contributions_2017.svg" alt="2017 contributions" /></a></div>
+</details>
