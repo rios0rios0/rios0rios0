@@ -24,3 +24,8 @@
 	<div align="center"><a><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_2022.svg" alt="2022 combined stats" /></a><a><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/top_languages_2022.svg" alt="2022 top languages" /></a></div>
 	<div align="center"><a><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/contributions_2022.svg" alt="2022 contributions" /></a></div>
 </details>
+<details>
+	<summary>2021</summary>
+	<div align="center"><a><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_2021.svg" alt="2021 combined stats" /></a><a><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/top_languages_2021.svg" alt="2021 top languages" /></a></div>
+	<div align="center"><a><img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/contributions_2021.svg" alt="2021 contributions" /></a></div>
+</details>
