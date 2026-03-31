@@ -341,7 +341,7 @@ func FetchGitHubStats(username, token string, from, to time.Time, skipLanguages 
 		"to":       to.Format(time.RFC3339),
 	}).Debug("calling GitHub GraphQL API for contributions")
 	query := fmt.Sprintf(`{
-		"query": "query { user(login: \"%s\") { contributionsCollection(from: \"%s\", to: \"%s\") { totalCommitContributions totalPullRequestContributions totalIssueContributions contributionCalendar { weeks { contributionDays { date contributionCount } } } commitContributionsByRepository(maxRepositories: 100) { contributions { totalCount } repository { name owner { login } isPrivate } } } repositories(first: 100, ownerAffiliations: OWNER, isFork: false, privacy: PUBLIC) { totalCount } } }"
+		"query": "query { user(login: \"%s\") { contributionsCollection(from: \"%s\", to: \"%s\") { totalCommitContributions totalPullRequestContributions totalIssueContributions contributionCalendar { weeks { contributionDays { date contributionCount } } } commitContributionsByRepository(maxRepositories: 100) { contributions { totalCount } repository { name owner { login } isPrivate } } } } }"
 	}`, username, from.Format(time.RFC3339), to.Format(time.RFC3339))
 
 	req, err := http.NewRequest("POST", "https://api.github.com/graphql", strings.NewReader(query))
@@ -395,9 +395,6 @@ func FetchGitHubStats(username, token string, from, to time.Time, skipLanguages 
 						} `json:"repository"`
 					} `json:"commitContributionsByRepository"`
 				} `json:"contributionsCollection"`
-				Repositories struct {
-					TotalCount int `json:"totalCount"`
-				} `json:"repositories"`
 			} `json:"user"`
 		} `json:"data"`
 	}
@@ -410,7 +407,7 @@ func FetchGitHubStats(username, token string, from, to time.Time, skipLanguages 
 	stats.TotalCommits = cc.TotalCommitContributions
 	stats.TotalPRsOrMRs = cc.TotalPullRequestContributions
 	stats.TotalIssuesOrWIs = cc.TotalIssueContributions
-	stats.TotalRepos = gqlResp.Data.User.Repositories.TotalCount
+	stats.TotalRepos = len(cc.CommitContributionsByRepository)
 
 	var minDate, maxDate string
 	var totalDaysWithContribs int
@@ -532,7 +529,6 @@ func fetchGitHubLanguages(client *http.Client, username, token string, repoContr
 			stats.Languages[lang] += int64(math.Round(float64(byteCount) * weight))
 		}
 		successCount++
-		stats.TotalRepos++
 	}
 	if successCount == 0 && len(repoContribs) > 0 {
 		return fmt.Errorf("all %d language requests failed", len(repoContribs))
@@ -759,8 +755,6 @@ func fetchGitLabLanguages(client *http.Client, userID int, accessToken string, s
 
 		allTooOld := true
 		for _, proj := range projects {
-			stats.TotalRepos++
-
 			// Skip projects not active since the cutoff date
 			lastActivity, err := time.Parse(time.RFC3339Nano, proj.LastActivityAt)
 			if err != nil {
@@ -770,6 +764,7 @@ func fetchGitLabLanguages(client *http.Client, userID int, accessToken string, s
 				continue
 			}
 			allTooOld = false
+			stats.TotalRepos++
 			langURL := fmt.Sprintf("https://gitlab.com/api/v4/projects/%d/languages", proj.ID)
 			if logger.IsLevelEnabled(logger.DebugLevel) {
 				logger.WithFields(logger.Fields{
@@ -1714,16 +1709,29 @@ func renderLanguagesBarChart(languages map[string]map[PlatformName]int64) (strin
 	if len(entries) > 5 {
 		entries = entries[:5]
 	}
-	if len(entries) == 0 {
-		return "", fmt.Errorf("no language data")
-	}
 
 	var grandTotal int64
 	for _, e := range entries {
 		grandTotal += e.Total
 	}
-	if grandTotal == 0 {
-		return "", fmt.Errorf("all language byte counts are zero")
+
+	if len(entries) == 0 || grandTotal == 0 {
+		legend := renderPlatformLegend(25, 230)
+		svg := fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="495" height="260" viewBox="0 0 495 260" fill="none" role="img">
+<title>Top Languages</title>
+<style>
+	.header { font: 600 14px 'Segoe UI', Ubuntu, Sans-Serif; fill: #fff; }
+	.stat { font: 400 12px 'Segoe UI', Ubuntu, Sans-Serif; fill: #c9d1d9; }
+	.legend-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
+</style>
+<rect data-testid="card-bg" x="0.5" y="0.5" rx="4.5" height="99%%" width="494" fill="#151515" stroke="#e4e2e2" stroke-opacity="0.2"/>
+<g data-testid="card-title" transform="translate(25, 25)">
+	<text x="0" y="0" class="header" data-testid="header">Top Languages (across all platforms)</text>
+</g>
+<text x="247.5" y="130" class="stat" text-anchor="middle">No language data available</text>
+%s
+</svg>`, legend)
+		return svg, nil
 	}
 
 	maxBytes := entries[0].Total
@@ -2462,23 +2470,12 @@ func main() {
 		// Languages: delta-based from accumulated history snapshots
 		langsByPlatform := aggregateLanguagesByPlatform(stats)
 		if err := GenerateLanguagesBarChart(langsByPlatform, filepath.Join(outputDir, "top_languages"+suffix)); err != nil {
-			errMsg := err.Error()
-			if strings.Contains(errMsg, "no language data") || strings.Contains(errMsg, "all language byte counts are zero") {
-				// Expected "no data" condition: warn and continue without marking a hard error.
-				logger.WithFields(logger.Fields{
-					"year":  year,
-					"chart": "top_languages",
-					"error": err.Error(),
-				}).Warn("skipping chart due to missing data")
-			} else {
-				// Unexpected failure (e.g., file I/O, template, logic): treat as an error.
-				logger.WithFields(logger.Fields{
-					"year":  year,
-					"chart": "top_languages",
-					"error": err.Error(),
-				}).Error("failed to generate SVG")
-				hadErrors = true
-			}
+			logger.WithFields(logger.Fields{
+				"year":  year,
+				"chart": "top_languages",
+				"error": err.Error(),
+			}).Error("failed to generate SVG")
+			hadErrors = true
 		}
 
 		// Contribution heatmap

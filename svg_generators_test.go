@@ -172,18 +172,20 @@ func TestRenderTokensHeatmap(t *testing.T) {
 func TestRenderLanguagesBarChart(t *testing.T) {
 	t.Parallel()
 
-	t.Run("should return error when languages map is empty", func(t *testing.T) {
+	t.Run("should produce placeholder SVG when languages map is empty", func(t *testing.T) {
 		// given
 		languages := map[string]map[PlatformName]int64{}
 
 		// when
-		_, err := renderLanguagesBarChart(languages)
+		result, err := renderLanguagesBarChart(languages)
 
 		// then
-		assert.Error(t, err)
+		require.NoError(t, err)
+		assertValidSVGXML(t, result)
+		assert.Contains(t, result, "No language data available")
 	})
 
-	t.Run("should return error when all language byte counts are zero", func(t *testing.T) {
+	t.Run("should produce placeholder SVG when all language byte counts are zero", func(t *testing.T) {
 		// given
 		languages := map[string]map[PlatformName]int64{
 			"Go":     {PlatformGitHub: 0},
@@ -191,10 +193,12 @@ func TestRenderLanguagesBarChart(t *testing.T) {
 		}
 
 		// when
-		_, err := renderLanguagesBarChart(languages)
+		result, err := renderLanguagesBarChart(languages)
 
 		// then
-		assert.Error(t, err)
+		require.NoError(t, err)
+		assertValidSVGXML(t, result)
+		assert.Contains(t, result, "No language data available")
 	})
 
 	t.Run("should produce valid XML with platform-attributed languages", func(t *testing.T) {
