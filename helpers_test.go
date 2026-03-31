@@ -71,6 +71,22 @@ func TestFormatNumber(t *testing.T) {
 			assert.Equal(t, expected, result)
 		}
 	})
+
+	t.Run("should format with B suffix when in billions", func(t *testing.T) {
+		// given
+		values := map[int]string{
+			1000000000: "1.0B",
+			2500000000: "2.5B",
+		}
+
+		for input, expected := range values {
+			// when
+			result := formatNumber(input)
+
+			// then
+			assert.Equal(t, expected, result)
+		}
+	})
 }
 
 func TestTopNLanguagesForPlatform(t *testing.T) {
@@ -503,7 +519,7 @@ func TestAccumulateByYear(t *testing.T) {
 		assert.Equal(t, int64(30000), result[2026][0].Stats.Languages["Python"])
 	})
 
-	t.Run("should compute language delta between earliest and latest snapshots", func(t *testing.T) {
+	t.Run("should use max language bytes across multiple snapshots", func(t *testing.T) {
 		// given
 		history := &StatsHistory{
 			Version: 1,
@@ -535,12 +551,12 @@ func TestAccumulateByYear(t *testing.T) {
 		result := accumulateByYear(history)
 
 		// then
-		assert.Equal(t, int64(80000), result[2026][0].Stats.Languages["Go"])
-		assert.Equal(t, int64(5000), result[2026][0].Stats.Languages["Python"])
+		assert.Equal(t, int64(180000), result[2026][0].Stats.Languages["Go"])
+		assert.Equal(t, int64(55000), result[2026][0].Stats.Languages["Python"])
 		assert.Equal(t, int64(20000), result[2026][0].Stats.Languages["Rust"])
 	})
 
-	t.Run("should clamp negative language delta to zero when repo deleted", func(t *testing.T) {
+	t.Run("should preserve language from earlier snapshot when later snapshot has zero", func(t *testing.T) {
 		// given
 		history := &StatsHistory{
 			Version: 1,
@@ -570,8 +586,8 @@ func TestAccumulateByYear(t *testing.T) {
 		result := accumulateByYear(history)
 
 		// then
-		assert.Equal(t, int64(20000), result[2026][0].Stats.Languages["Go"])
-		assert.Equal(t, int64(0), result[2026][0].Stats.Languages["OldLang"])
+		assert.Equal(t, int64(120000), result[2026][0].Stats.Languages["Go"])
+		assert.Equal(t, int64(50000), result[2026][0].Stats.Languages["OldLang"])
 	})
 }
 
