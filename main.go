@@ -980,8 +980,6 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time,
 			continue
 		}
 
-		stats.TotalRepos += len(reposResult.Value)
-
 		// Count commits with dates
 		for _, repo := range reposResult.Value {
 			repoHadCommits := false
@@ -1103,6 +1101,8 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time,
 			skip += 100
 		}
 	}
+
+	stats.TotalRepos = len(activeRepos)
 
 	// Fetch languages only from repos the user committed to.
 	// Skip language fetching in daily mode as it is the expensive part.
