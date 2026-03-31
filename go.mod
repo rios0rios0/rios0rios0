@@ -5,7 +5,6 @@ go 1.26.1
 require (
 	github.com/sirupsen/logrus v1.9.4
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/text v0.35.0
 )
 
 require (

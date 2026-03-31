@@ -16,8 +16,6 @@ import (
 	"time"
 
 	logger "github.com/sirupsen/logrus"
-	"golang.org/x/text/language"
-	"golang.org/x/text/message"
 )
 
 // PlatformStats holds stats from a single platform
@@ -214,11 +212,8 @@ func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 		maxPRs        int
 		maxIssues     int
 		maxRepos      int
-		contributions map[string]int    // date -> max count
-		earliestDate  string            // earliest snapshot date in this year
-		earliestLangs map[string]int64  // language bytes from earliest snapshot
-		latestDate    string            // latest snapshot date in this year
-		latestLangs   map[string]int64  // language bytes from latest snapshot
+		contributions map[string]int   // date -> max count
+		maxLangs      map[string]int64 // language -> max bytes across all snapshots
 	}
 
 	yearPlatform := make(map[int]map[PlatformName]*accumEntry)
@@ -238,8 +233,7 @@ func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 				if entry == nil {
 					entry = &accumEntry{
 						contributions: make(map[string]int),
-						earliestLangs: make(map[string]int64),
-						latestLangs:   make(map[string]int64),
+						maxLangs:      make(map[string]int64),
 					}
 					yearPlatform[snapYear][platform] = entry
 				}
@@ -255,19 +249,10 @@ func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 				if ps.TotalRepos > entry.maxRepos {
 					entry.maxRepos = ps.TotalRepos
 				}
-				// Track earliest and latest language snapshots for delta calculation
-				if entry.earliestDate == "" || snap.Date < entry.earliestDate {
-					entry.earliestDate = snap.Date
-					entry.earliestLangs = make(map[string]int64)
-					for lang, bytes := range ps.Languages {
-						entry.earliestLangs[lang] = bytes
-					}
-				}
-				if snap.Date > entry.latestDate {
-					entry.latestDate = snap.Date
-					entry.latestLangs = make(map[string]int64)
-					for lang, bytes := range ps.Languages {
-						entry.latestLangs[lang] = bytes
+				// Track max language bytes across all snapshots
+				for lang, bytes := range ps.Languages {
+					if bytes > entry.maxLangs[lang] {
+						entry.maxLangs[lang] = bytes
 					}
 				}
 			}
@@ -288,8 +273,7 @@ func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 				if entry == nil {
 					entry = &accumEntry{
 						contributions: make(map[string]int),
-						earliestLangs: make(map[string]int64),
-						latestLangs:   make(map[string]int64),
+						maxLangs:      make(map[string]int64),
 					}
 					yearPlatform[contribYear][platform] = entry
 				}
@@ -309,56 +293,11 @@ func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 				continue
 			}
 
-			// Compute language delta: latest - earliest for each language
-			langs := make(map[string]int64)
-			if entry.earliestDate == entry.latestDate {
-				// Single snapshot: use absolute values (first run)
-				logger.WithFields(logger.Fields{
-					"year":     year,
-					"platform": string(p),
-					"snapshot": entry.latestDate,
-					"method":   "absolute",
-				}).Debug("language accumulation: single snapshot")
-				for lang, bytes := range entry.latestLangs {
-					if bytes > 0 {
-						langs[lang] = bytes
-					}
-				}
-			} else {
-				// Multiple snapshots: compute delta
-				logger.WithFields(logger.Fields{
-					"year":     year,
-					"platform": string(p),
-					"earliest": entry.earliestDate,
-					"latest":   entry.latestDate,
-					"method":   "delta",
-				}).Debug("language accumulation: computing delta between snapshots")
-				for lang, latestBytes := range entry.latestLangs {
-					delta := latestBytes - entry.earliestLangs[lang]
-					if delta > 0 {
-						langs[lang] = delta
-					} else {
-						logger.WithFields(logger.Fields{
-							"year":     year,
-							"platform": string(p),
-							"language": lang,
-							"earliest": entry.earliestLangs[lang],
-							"latest":   latestBytes,
-							"delta":    delta,
-						}).Debug("language dropped: non-positive delta")
-					}
-				}
-				// Include new languages that only appear in latest
-				for lang, latestBytes := range entry.latestLangs {
-					if _, exists := entry.earliestLangs[lang]; !exists && latestBytes > 0 {
-						langs[lang] = latestBytes
-					}
-				}
-			}
+			// Use max language bytes across all snapshots in this year
 			logger.WithFields(logger.Fields{
 				"year":      year,
 				"platform":  string(p),
-				"surviving": len(langs),
+				"languages": len(entry.maxLangs),
 			}).Debug("language accumulation result")
 
 			result[year] = append(result[year], NamedPlatformStats{
@@ -368,7 +307,7 @@ func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 					TotalPRsOrMRs:      entry.maxPRs,
 					TotalIssuesOrWIs:   entry.maxIssues,
 					TotalRepos:         entry.maxRepos,
-					Languages:          langs,
+					Languages:          entry.maxLangs,
 					DailyContributions: entry.contributions,
 				},
 			})
@@ -379,7 +318,7 @@ func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 
 // --- GitHub ---
 
-func FetchGitHubStats(username, token string, from, to time.Time) (*PlatformStats, error) {
+func FetchGitHubStats(username, token string, from, to time.Time, skipLanguages bool) (*PlatformStats, error) {
 	start := time.Now()
 	defer func() {
 		logger.WithFields(logger.Fields{
@@ -502,8 +441,8 @@ func FetchGitHubStats(username, token string, from, to time.Time) (*PlatformStat
 	// Fetch languages weighted by commit activity in the contribution period.
 	// commitContributionsByRepository gives repos the user actually committed to,
 	// so we weight each repo's language bytes by its share of total commits.
-	// Skip language fetching in daily mode (from == to) as it is the expensive part.
-	if !from.Equal(to) {
+	// Skip language fetching in daily mode as it is the expensive part.
+	if !skipLanguages {
 		var repoContribs []repoContribution
 		for _, rc := range cc.CommitContributionsByRepository {
 			if rc.Repository.IsPrivate {
@@ -603,7 +542,7 @@ func fetchGitHubLanguages(client *http.Client, username, token string, repoContr
 
 // --- GitLab ---
 
-func FetchGitLabStats(username, accessToken string, from, to time.Time) (*PlatformStats, error) {
+func FetchGitLabStats(username, accessToken string, from, to time.Time, skipLanguages bool) (*PlatformStats, error) {
 	start := time.Now()
 	defer func() {
 		logger.WithFields(logger.Fields{
@@ -761,8 +700,8 @@ func FetchGitLabStats(username, accessToken string, from, to time.Time) (*Platfo
 	}).Debug("GitLab contributions parsed")
 
 	// Fetch languages only from projects with recent activity.
-	// Skip language fetching in daily mode (from == to) as it is the expensive part.
-	if !from.Equal(to) {
+	// Skip language fetching in daily mode as it is the expensive part.
+	if !skipLanguages {
 		if err = fetchGitLabLanguages(client, userID, accessToken, from, stats); err != nil {
 			logger.WithFields(logger.Fields{
 				"platform": "GitLab",
@@ -889,7 +828,7 @@ type adoProject struct {
 	Name string `json:"name"`
 }
 
-func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time) (*PlatformStats, error) {
+func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time, skipLanguages bool) (*PlatformStats, error) {
 	start := time.Now()
 	defer func() {
 		logger.WithFields(logger.Fields{
@@ -1166,8 +1105,8 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time)
 	}
 
 	// Fetch languages only from repos the user committed to.
-	// Skip language fetching in daily mode (from == to) as it is the expensive part.
-	if !from.Equal(to) {
+	// Skip language fetching in daily mode as it is the expensive part.
+	if !skipLanguages {
 		fetchAzureDevOpsLanguages(newRequest, doRequest, organization, activeRepos, stats)
 	}
 
@@ -1236,6 +1175,41 @@ var extensionToLanguage = map[string]string{
 	".md": "Markdown", ".pas": "Pascal", ".pp": "Pascal", ".lpr": "Pascal",
 	".r": "R", ".m": "Objective-C", ".mm": "Objective-C",
 	".groovy": "Groovy", ".gradle": "Groovy", ".pl": "Perl",
+}
+
+// vendoredPrefixes lists directory prefixes for generated, vendored, or
+// dependency paths that should be excluded from language byte counting.
+// GitHub's Languages API already excludes these; this brings Azure DevOps
+// tree-based estimation in line with that behavior.
+var vendoredPrefixes = []string{
+	"node_modules/", "vendor/", "dist/", "build/", ".git/",
+	"__pycache__/", ".tox/", ".venv/", "venv/",
+	"pods/", "carthage/", ".gradle/",
+	"target/", "bin/", "obj/",
+}
+
+// vendoredFiles lists exact file names (basename) that should be excluded.
+var vendoredFiles = map[string]bool{
+	"package-lock.json": true, "yarn.lock": true, "pnpm-lock.yaml": true,
+	"go.sum": true, "Cargo.lock": true, "Gemfile.lock": true,
+	"composer.lock": true, "poetry.lock": true, "pdm.lock": true,
+}
+
+func isVendoredOrGenerated(relativePath string) bool {
+	lower := strings.ToLower(relativePath)
+	for _, prefix := range vendoredPrefixes {
+		if strings.HasPrefix(lower, prefix) || strings.Contains(lower, "/"+prefix) {
+			return true
+		}
+	}
+	base := filepath.Base(lower)
+	if vendoredFiles[base] {
+		return true
+	}
+	if strings.HasSuffix(base, ".min.js") || strings.HasSuffix(base, ".min.css") {
+		return true
+	}
+	return false
 }
 
 type adoRepoRef struct {
@@ -1406,6 +1380,9 @@ func fetchAzureDevOpsLanguages(
 			if entry.GitObjectType != "blob" {
 				continue
 			}
+			if isVendoredOrGenerated(entry.RelativePath) {
+				continue
+			}
 			ext := strings.ToLower(filepath.Ext(entry.RelativePath))
 			if lang, ok := extensionToLanguage[ext]; ok {
 				stats.Languages[lang] += int64(math.Round(float64(entry.Size) * weight))
@@ -1417,8 +1394,6 @@ func fetchAzureDevOpsLanguages(
 // --- SVG Generators ---
 
 func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
-	printer := message.NewPrinter(language.English)
-
 	type statRow struct {
 		Label  string
 		Icon   string
@@ -1521,7 +1496,7 @@ func renderCombinedStatsSVG(platformStats []NamedPlatformStats) string {
 		}
 
 		// Value
-		body += fmt.Sprintf(`<text class="stat bold" x="%d" y="12.5" text-anchor="end" data-testid="value">%s</text>`, valueX, printer.Sprintf("%d", row.Total))
+		body += fmt.Sprintf(`<text class="stat bold" x="%d" y="12.5" text-anchor="end" data-testid="value">%s</text>`, valueX, formatNumber(row.Total))
 		body += `</g>`
 	}
 
@@ -2014,6 +1989,9 @@ func GenerateContributionHeatmap(contributions map[string]map[PlatformName]int, 
 // --- Helpers ---
 
 func formatNumber(n int) string {
+	if n >= 1000000000 {
+		return fmt.Sprintf("%.1fB", float64(n)/1000000000)
+	}
 	if n >= 1000000 {
 		return fmt.Sprintf("%.1fM", float64(n)/1000000)
 	}
@@ -2266,7 +2244,7 @@ func main() {
 			to = time.Date(targetYear, 12, 31, 23, 59, 59, 0, time.UTC)
 		}
 	} else {
-		from = todayDate
+		from = todayDate.AddDate(0, 0, -1) // start from yesterday to capture a full day of contributions
 		to = nowUTC
 	}
 
@@ -2314,7 +2292,7 @@ func main() {
 				"from":     from.Format(time.RFC3339),
 				"to":       to.Format(time.RFC3339),
 			}).Info("fetching platform stats")
-			stats, err := FetchGitHubStats(ghUsername, ghToken, from, to)
+			stats, err := FetchGitHubStats(ghUsername, ghToken, from, to, mode == "daily")
 			resultCh <- fetchResult{PlatformGitHub, stats, err}
 		}()
 	}
@@ -2329,7 +2307,7 @@ func main() {
 				"from":     from.Format(time.RFC3339),
 				"to":       to.Format(time.RFC3339),
 			}).Info("fetching platform stats")
-			stats, err := FetchGitLabStats(glUsername, glToken, from, to)
+			stats, err := FetchGitLabStats(glUsername, glToken, from, to, mode == "daily")
 			resultCh <- fetchResult{PlatformGitLab, stats, err}
 		}()
 	}
@@ -2344,7 +2322,7 @@ func main() {
 				"from":     from.Format(time.RFC3339),
 				"to":       to.Format(time.RFC3339),
 			}).Info("fetching platform stats")
-			stats, err := FetchAzureDevOpsStats(adoOrg, adoToken, from, to)
+			stats, err := FetchAzureDevOpsStats(adoOrg, adoToken, from, to, mode == "daily")
 			resultCh <- fetchResult{PlatformAzureDevOps, stats, err}
 		}()
 	}
