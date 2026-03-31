@@ -408,6 +408,13 @@ func FetchGitHubStats(username, token string, from, to time.Time, skipLanguages 
 	stats.TotalPRsOrMRs = cc.TotalPullRequestContributions
 	stats.TotalIssuesOrWIs = cc.TotalIssueContributions
 	stats.TotalRepos = len(cc.CommitContributionsByRepository)
+	if stats.TotalRepos >= 100 {
+		logger.WithFields(logger.Fields{
+			"platform":  "GitHub",
+			"repos":     stats.TotalRepos,
+			"cap":       100,
+		}).Warn("repo count may be truncated by GitHub GraphQL maxRepositories cap")
+	}
 
 	var minDate, maxDate string
 	var totalDaysWithContribs int
