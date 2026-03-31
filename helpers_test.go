@@ -693,6 +693,57 @@ func TestFetchAzureDevOpsLanguages(t *testing.T) {
 		assert.Zero(t, stats.Languages["tree"])
 	})
 
+	t.Run("should exclude vendored and generated paths from language counts", func(t *testing.T) {
+		// given
+		repoMetaJSON, _ := json.Marshal(map[string]string{"defaultBranch": "refs/heads/main"})
+		allCommitsJSON, _ := json.Marshal(map[string]interface{}{"count": 1})
+		latestCommitJSON, _ := json.Marshal(map[string]interface{}{
+			"value": []map[string]string{{"commitId": "sha456"}},
+		})
+		commitDetailJSON, _ := json.Marshal(map[string]string{"treeId": "tree456"})
+		treeJSON, _ := json.Marshal(map[string]interface{}{
+			"truncated": false,
+			"treeEntries": []map[string]interface{}{
+				{"relativePath": "src/main.go", "gitObjectType": "blob", "size": 5000},
+				{"relativePath": "node_modules/lodash/index.js", "gitObjectType": "blob", "size": 100000},
+				{"relativePath": "vendor/github.com/pkg/errors/errors.go", "gitObjectType": "blob", "size": 20000},
+				{"relativePath": "dist/bundle.js", "gitObjectType": "blob", "size": 50000},
+				{"relativePath": "package-lock.json", "gitObjectType": "blob", "size": 80000},
+				{"relativePath": "assets/app.min.js", "gitObjectType": "blob", "size": 30000},
+				{"relativePath": "Pods/SomePod/lib.swift", "gitObjectType": "blob", "size": 15000},
+				{"relativePath": "src/utils.ts", "gitObjectType": "blob", "size": 3000},
+			},
+		})
+
+		callIndex := 0
+		responses := [][]byte{repoMetaJSON, allCommitsJSON, latestCommitJSON, commitDetailJSON, treeJSON}
+
+		newRequest := func(method, url string, body io.Reader) (*http.Request, error) {
+			return http.NewRequest(method, url, body)
+		}
+		doRequest := func(req *http.Request) ([]byte, int, error) {
+			idx := callIndex
+			callIndex++
+			if idx < len(responses) {
+				return responses[idx], http.StatusOK, nil
+			}
+			return nil, http.StatusNotFound, fmt.Errorf("unexpected call %d", idx)
+		}
+
+		stats := &PlatformStats{Languages: make(map[string]int64)}
+		repos := []adoRepoRef{{ProjectID: "proj1", RepoID: "repo1", UserCommits: 1}}
+
+		// when
+		fetchAzureDevOpsLanguages(newRequest, doRequest, "myorg", repos, stats)
+
+		// then - only non-vendored files should be counted
+		assert.Equal(t, int64(5000), stats.Languages["Go"])
+		assert.Equal(t, int64(3000), stats.Languages["TypeScript"])
+		assert.Zero(t, stats.Languages["JavaScript"]) // node_modules + dist excluded
+		assert.Zero(t, stats.Languages["JSON"])        // package-lock.json excluded
+		assert.Zero(t, stats.Languages["Swift"])       // Pods/ excluded
+	})
+
 	t.Run("should skip repos with no commits", func(t *testing.T) {
 		// given
 		repoMetaJSON, _ := json.Marshal(map[string]string{"defaultBranch": "refs/heads/main"})

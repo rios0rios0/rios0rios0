@@ -318,7 +318,7 @@ func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 
 // --- GitHub ---
 
-func FetchGitHubStats(username, token string, from, to time.Time) (*PlatformStats, error) {
+func FetchGitHubStats(username, token string, from, to time.Time, skipLanguages bool) (*PlatformStats, error) {
 	start := time.Now()
 	defer func() {
 		logger.WithFields(logger.Fields{
@@ -441,8 +441,8 @@ func FetchGitHubStats(username, token string, from, to time.Time) (*PlatformStat
 	// Fetch languages weighted by commit activity in the contribution period.
 	// commitContributionsByRepository gives repos the user actually committed to,
 	// so we weight each repo's language bytes by its share of total commits.
-	// Skip language fetching in daily mode (from == to) as it is the expensive part.
-	if !from.Equal(to) {
+	// Skip language fetching in daily mode as it is the expensive part.
+	if !skipLanguages {
 		var repoContribs []repoContribution
 		for _, rc := range cc.CommitContributionsByRepository {
 			if rc.Repository.IsPrivate {
@@ -542,7 +542,7 @@ func fetchGitHubLanguages(client *http.Client, username, token string, repoContr
 
 // --- GitLab ---
 
-func FetchGitLabStats(username, accessToken string, from, to time.Time) (*PlatformStats, error) {
+func FetchGitLabStats(username, accessToken string, from, to time.Time, skipLanguages bool) (*PlatformStats, error) {
 	start := time.Now()
 	defer func() {
 		logger.WithFields(logger.Fields{
@@ -700,8 +700,8 @@ func FetchGitLabStats(username, accessToken string, from, to time.Time) (*Platfo
 	}).Debug("GitLab contributions parsed")
 
 	// Fetch languages only from projects with recent activity.
-	// Skip language fetching in daily mode (from == to) as it is the expensive part.
-	if !from.Equal(to) {
+	// Skip language fetching in daily mode as it is the expensive part.
+	if !skipLanguages {
 		if err = fetchGitLabLanguages(client, userID, accessToken, from, stats); err != nil {
 			logger.WithFields(logger.Fields{
 				"platform": "GitLab",
@@ -828,7 +828,7 @@ type adoProject struct {
 	Name string `json:"name"`
 }
 
-func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time) (*PlatformStats, error) {
+func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time, skipLanguages bool) (*PlatformStats, error) {
 	start := time.Now()
 	defer func() {
 		logger.WithFields(logger.Fields{
@@ -1105,8 +1105,8 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time)
 	}
 
 	// Fetch languages only from repos the user committed to.
-	// Skip language fetching in daily mode (from == to) as it is the expensive part.
-	if !from.Equal(to) {
+	// Skip language fetching in daily mode as it is the expensive part.
+	if !skipLanguages {
 		fetchAzureDevOpsLanguages(newRequest, doRequest, organization, activeRepos, stats)
 	}
 
@@ -1184,7 +1184,7 @@ var extensionToLanguage = map[string]string{
 var vendoredPrefixes = []string{
 	"node_modules/", "vendor/", "dist/", "build/", ".git/",
 	"__pycache__/", ".tox/", ".venv/", "venv/",
-	"Pods/", "Carthage/", ".gradle/",
+	"pods/", "carthage/", ".gradle/",
 	"target/", "bin/", "obj/",
 }
 
@@ -2292,7 +2292,7 @@ func main() {
 				"from":     from.Format(time.RFC3339),
 				"to":       to.Format(time.RFC3339),
 			}).Info("fetching platform stats")
-			stats, err := FetchGitHubStats(ghUsername, ghToken, from, to)
+			stats, err := FetchGitHubStats(ghUsername, ghToken, from, to, mode == "daily")
 			resultCh <- fetchResult{PlatformGitHub, stats, err}
 		}()
 	}
@@ -2307,7 +2307,7 @@ func main() {
 				"from":     from.Format(time.RFC3339),
 				"to":       to.Format(time.RFC3339),
 			}).Info("fetching platform stats")
-			stats, err := FetchGitLabStats(glUsername, glToken, from, to)
+			stats, err := FetchGitLabStats(glUsername, glToken, from, to, mode == "daily")
 			resultCh <- fetchResult{PlatformGitLab, stats, err}
 		}()
 	}
@@ -2322,7 +2322,7 @@ func main() {
 				"from":     from.Format(time.RFC3339),
 				"to":       to.Format(time.RFC3339),
 			}).Info("fetching platform stats")
-			stats, err := FetchAzureDevOpsStats(adoOrg, adoToken, from, to)
+			stats, err := FetchAzureDevOpsStats(adoOrg, adoToken, from, to, mode == "daily")
 			resultCh <- fetchResult{PlatformAzureDevOps, stats, err}
 		}()
 	}
