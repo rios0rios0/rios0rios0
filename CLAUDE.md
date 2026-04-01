@@ -33,20 +33,21 @@ The Makefile only has `test` and `generate` targets. There are no `lint` or `sas
 
 Platform credentials (at least one required):
 
-| Variable | Platform |
-|---|---|
-| `GITHUB_USERNAME`, `GH_TOKEN` | GitHub |
-| `GITLAB_USERNAME`, `GITLAB_ACCESS_TOKEN` | GitLab |
+| Variable                                        | Platform     |
+|-------------------------------------------------|--------------|
+| `GITHUB_USERNAME`, `GH_TOKEN`                   | GitHub       |
+| `GITLAB_USERNAME`, `GITLAB_ACCESS_TOKEN`        | GitLab       |
 | `AZURE_DEVOPS_ORG`, `AZURE_DEVOPS_ACCESS_TOKEN` | Azure DevOps |
 
 Path configuration (defaults work for local development):
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `RUN_MODE` | `daily` | Operating mode: `daily`, `bootstrap`, or `recalculate` |
-| `TARGET_YEAR` | (none) | Year to recalculate (required when `RUN_MODE=recalculate`) |
-| `STATS_HISTORY_PATH` | `stats_history.json` | Path to read/write historical snapshots |
-| `SVG_OUTPUT_DIR` | `.` | Directory for generated SVG files |
+| Variable             | Default              | Purpose                                                    |
+|----------------------|----------------------|------------------------------------------------------------|
+| `RUN_MODE`           | `daily`              | Operating mode: `daily`, `bootstrap`, or `recalculate`     |
+| `TARGET_YEAR`        | (none)               | Year to recalculate (required when `RUN_MODE=recalculate`) |
+| `STATS_HISTORY_PATH` | `stats_history.json` | Path to read/write historical snapshots                    |
+| `SVG_OUTPUT_DIR`     | `.`                  | Directory for generated SVG files                          |
+| `README_PATH`        | `README.md`          | Path to README for auto-inserting new year sections        |
 
 ## Architecture
 
@@ -78,13 +79,13 @@ Platform colors: GitHub `#238636`, GitLab `#e24329`, Azure DevOps `#0078d4`. Uni
 
 Per-year SVGs (e.g., `combined_stats_2026.svg`) plus `_final.svg` aliases pointing to the current year:
 
-| Pattern | Content |
-|---|---|
-| `combined_stats_{year}.svg` | Stats card with stacked bars per metric |
-| `top_languages_{year}.svg` | Language bar chart stacked by platform |
-| `contributions_{year}.svg` | Contribution heatmap (Jan 1 - Dec 31 or today) |
-| `claude_tokens_final.svg` | Token usage line graph (not year-scoped) |
-| `stats_history.json` | Accumulated daily snapshots |
+| Pattern                     | Content                                        |
+|-----------------------------|------------------------------------------------|
+| `combined_stats_{year}.svg` | Stats card with stacked bars per metric        |
+| `top_languages_{year}.svg`  | Language bar chart stacked by platform         |
+| `contributions_{year}.svg`  | Contribution heatmap (Jan 1 - Dec 31 or today) |
+| `claude_tokens_final.svg`   | Token usage line graph (not year-scoped)       |
+| `stats_history.json`        | Accumulated daily snapshots                    |
 
 ## CI/CD
 

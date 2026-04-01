@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -2202,6 +2203,113 @@ func loadTokenUsage(path string) ([]TokenUsage, error) {
 	return tokens, nil
 }
 
+// --- README ---
+
+func formatYearBlock(year int, ghUsername string) string {
+	baseURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/stats", ghUsername, ghUsername)
+	return fmt.Sprintf("<details>\n"+
+		"\t<summary>%d</summary>\n"+
+		"\t<div align=\"center\">\n"+
+		"\t\t<img src=\"%s/combined_stats_%d.svg\" height=\"220\" alt=\"%d combined stats\" />\n"+
+		"\t\t<img src=\"%s/top_languages_%d.svg\" height=\"220\" alt=\"%d top languages\" />\n"+
+		"\t</div>\n"+
+		"\t<div align=\"center\">\n"+
+		"\t\t<img src=\"%s/contributions_%d.svg\" alt=\"%d contributions\" />\n"+
+		"\t</div>\n"+
+		"</details>",
+		year,
+		baseURL, year, year,
+		baseURL, year, year,
+		baseURL, year, year,
+	)
+}
+
+func updateReadmeYearSections(readmePath string, years []int, ghUsername string) {
+	if ghUsername == "" {
+		logger.Info("no GitHub username configured, skipping README year section update")
+		return
+	}
+
+	data, err := os.ReadFile(readmePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			logger.WithField("path", readmePath).Info("README not found, skipping year section update")
+			return
+		}
+		logger.WithFields(logger.Fields{
+			"path":  readmePath,
+			"error": err.Error(),
+		}).Warn("could not read README, skipping year section update")
+		return
+	}
+	content := string(data)
+
+	// Parse existing year sections
+	yearRe := regexp.MustCompile(`<summary>(\d{4})</summary>`)
+	matches := yearRe.FindAllStringSubmatch(content, -1)
+	existingYears := make(map[int]bool)
+	for _, m := range matches {
+		if y, err := strconv.Atoi(m[1]); err == nil {
+			existingYears[y] = true
+		}
+	}
+
+	// Find new years to insert
+	var newYears []int
+	for _, y := range years {
+		if !existingYears[y] {
+			newYears = append(newYears, y)
+		}
+	}
+
+	if len(newYears) == 0 {
+		logger.Info("all years already present in README, no updates needed")
+		return
+	}
+
+	// Sort new years descending (insert from highest to lowest)
+	sort.Sort(sort.Reverse(sort.IntSlice(newYears)))
+
+	detailsRe := regexp.MustCompile(`(?s)<details>\s*\n?\s*<summary>(\d{4})</summary>.*?</details>`)
+
+	for _, newYear := range newYears {
+		block := formatYearBlock(newYear, ghUsername)
+
+		// Re-parse positions after each insertion (content changes)
+		allMatches := detailsRe.FindAllStringSubmatchIndex(content, -1)
+
+		inserted := false
+		for _, loc := range allMatches {
+			existYear, _ := strconv.Atoi(content[loc[2]:loc[3]])
+			if existYear < newYear {
+				// Insert before this block
+				content = content[:loc[0]] + block + "\n" + content[loc[0]:]
+				inserted = true
+				break
+			}
+		}
+		if !inserted && len(allMatches) > 0 {
+			// New year is older than all existing, append after last </details>
+			lastEnd := allMatches[len(allMatches)-1][1]
+			content = content[:lastEnd] + "\n" + block + content[lastEnd:]
+		} else if !inserted {
+			// No existing year sections at all, append at end
+			content = strings.TrimRight(content, "\n") + "\n" + block + "\n"
+		}
+
+		logger.WithField("year", newYear).Info("inserted new year section in README")
+	}
+
+	if err := os.WriteFile(readmePath, []byte(content), 0644); err != nil {
+		logger.WithFields(logger.Fields{
+			"path":  readmePath,
+			"error": err.Error(),
+		}).Error("failed to write updated README")
+		return
+	}
+	logger.WithField("path", readmePath).Info("README updated with new year sections")
+}
+
 // --- Main ---
 
 func getEnvOrDefault(key, defaultVal string) string {
@@ -2529,6 +2637,10 @@ func main() {
 		"elapsed": time.Since(svgStart).String(),
 		"years":   len(years),
 	}).Info("SVG generation completed")
+
+	// 6.5. Update README with any new year sections
+	readmePath := getEnvOrDefault("README_PATH", "README.md")
+	updateReadmeYearSections(readmePath, years, ghUsername)
 
 	// 7. Generate Claude Code tokens heatmap (not year-based)
 	tokenData, err := loadTokenUsage("claude_tokens.json")
