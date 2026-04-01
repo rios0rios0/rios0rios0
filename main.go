@@ -319,7 +319,7 @@ func accumulateByYear(history *StatsHistory) map[int][]NamedPlatformStats {
 
 // --- GitHub ---
 
-func FetchGitHubStats(username, token string, from, to time.Time, skipLanguages bool) (*PlatformStats, error) {
+func FetchGitHubStats(client *http.Client, username, token string, from, to time.Time, skipLanguages bool) (*PlatformStats, error) {
 	start := time.Now()
 	defer func() {
 		logger.WithFields(logger.Fields{
@@ -327,6 +327,10 @@ func FetchGitHubStats(username, token string, from, to time.Time, skipLanguages 
 			"elapsed":  time.Since(start).String(),
 		}).Debug("platform fetch completed")
 	}()
+
+	if client == nil {
+		client = &http.Client{}
+	}
 
 	stats := &PlatformStats{
 		Languages:          make(map[string]int64),
@@ -351,8 +355,6 @@ func FetchGitHubStats(username, token string, from, to time.Time, skipLanguages 
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -546,7 +548,7 @@ func fetchGitHubLanguages(client *http.Client, username, token string, repoContr
 
 // --- GitLab ---
 
-func FetchGitLabStats(username, accessToken string, from, to time.Time, skipLanguages bool) (*PlatformStats, error) {
+func FetchGitLabStats(client *http.Client, username, accessToken string, from, to time.Time, skipLanguages bool) (*PlatformStats, error) {
 	start := time.Now()
 	defer func() {
 		logger.WithFields(logger.Fields{
@@ -555,12 +557,14 @@ func FetchGitLabStats(username, accessToken string, from, to time.Time, skipLang
 		}).Debug("platform fetch completed")
 	}()
 
+	if client == nil {
+		client = &http.Client{}
+	}
+
 	stats := &PlatformStats{
 		Languages:          make(map[string]int64),
 		DailyContributions: make(map[string]int),
 	}
-
-	client := &http.Client{}
 
 	// Fetch user ID
 	userURL := fmt.Sprintf("https://gitlab.com/api/v4/users?username=%s", username)
@@ -831,7 +835,7 @@ type adoProject struct {
 	Name string `json:"name"`
 }
 
-func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time, skipLanguages bool) (*PlatformStats, error) {
+func FetchAzureDevOpsStats(client *http.Client, organization, accessToken string, from, to time.Time, skipLanguages bool) (*PlatformStats, error) {
 	start := time.Now()
 	defer func() {
 		logger.WithFields(logger.Fields{
@@ -840,12 +844,14 @@ func FetchAzureDevOpsStats(organization, accessToken string, from, to time.Time,
 		}).Debug("platform fetch completed")
 	}()
 
+	if client == nil {
+		client = &http.Client{}
+	}
+
 	stats := &PlatformStats{
 		Languages:          make(map[string]int64),
 		DailyContributions: make(map[string]int),
 	}
-
-	client := &http.Client{}
 	authHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte(":"+accessToken))
 
 	newRequest := func(method, reqURL string, body io.Reader) (*http.Request, error) {
@@ -2415,7 +2421,7 @@ func main() {
 				"from":     from.Format(time.RFC3339),
 				"to":       to.Format(time.RFC3339),
 			}).Info("fetching platform stats")
-			stats, err := FetchGitHubStats(ghUsername, ghToken, from, to, mode == "daily")
+			stats, err := FetchGitHubStats(nil, ghUsername, ghToken, from, to, mode == "daily")
 			resultCh <- fetchResult{PlatformGitHub, stats, err}
 		}()
 	}
@@ -2430,7 +2436,7 @@ func main() {
 				"from":     from.Format(time.RFC3339),
 				"to":       to.Format(time.RFC3339),
 			}).Info("fetching platform stats")
-			stats, err := FetchGitLabStats(glUsername, glToken, from, to, mode == "daily")
+			stats, err := FetchGitLabStats(nil, glUsername, glToken, from, to, mode == "daily")
 			resultCh <- fetchResult{PlatformGitLab, stats, err}
 		}()
 	}
@@ -2445,7 +2451,7 @@ func main() {
 				"from":     from.Format(time.RFC3339),
 				"to":       to.Format(time.RFC3339),
 			}).Info("fetching platform stats")
-			stats, err := FetchAzureDevOpsStats(adoOrg, adoToken, from, to, mode == "daily")
+			stats, err := FetchAzureDevOpsStats(nil, adoOrg, adoToken, from, to, mode == "daily")
 			resultCh <- fetchResult{PlatformAzureDevOps, stats, err}
 		}()
 	}

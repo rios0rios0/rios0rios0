@@ -872,6 +872,37 @@ func TestUpdateReadmeYearSections(t *testing.T) {
 		assert.Greater(t, pos2024, pos2025, "2024 should come after 2025")
 	})
 
+	t.Run("should handle unreadable README gracefully", func(t *testing.T) {
+		// given - use a directory path as the file path to cause a non-NotExist read error
+		dir := t.TempDir()
+		readmePath := dir // a directory, not a file
+
+		// when / then (should not panic)
+		updateReadmeYearSections(readmePath, []int{2025}, "testuser")
+	})
+
+	t.Run("should handle unwritable README gracefully", func(t *testing.T) {
+		// given
+		dir := t.TempDir()
+		readmePath := filepath.Join(dir, "README.md")
+		content := "<details>\n\t<summary>2025</summary>\n\t<div align=\"center\">\n\t\t<img src=\"x\" />\n\t</div>\n</details>\n"
+		if err := os.WriteFile(readmePath, []byte(content), 0644); err != nil {
+			t.Fatalf("failed to create temporary README file: %v", err)
+		}
+		// Make file unwritable
+		if err := os.Chmod(readmePath, 0444); err != nil {
+			t.Skipf("skipping unwritable README test; chmod not supported or failed: %v", err)
+		}
+
+		// when / then (should not panic, just log)
+		updateReadmeYearSections(readmePath, []int{2024, 2025}, "testuser")
+
+		// cleanup
+		if err := os.Chmod(readmePath, 0644); err != nil {
+			t.Logf("failed to reset permissions on temporary README file: %v", err)
+		}
+	})
+
 	t.Run("should skip when GitHub username is empty", func(t *testing.T) {
 		// given
 		dir := t.TempDir()
@@ -885,5 +916,419 @@ func TestUpdateReadmeYearSections(t *testing.T) {
 		// then
 		data, _ := os.ReadFile(readmePath)
 		assert.Equal(t, content, string(data))
+	})
+}
+
+func TestPlatformColorDefault(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return grey for unknown platform", func(t *testing.T) {
+		// given
+		p := PlatformName("unknown")
+
+		// when
+		color := p.Color()
+
+		// then
+		assert.Equal(t, "#8b949e", color)
+	})
+}
+
+func TestPlatformToComboDefault(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return 0 for unknown platform", func(t *testing.T) {
+		// given
+		p := PlatformName("unknown")
+
+		// when
+		combo := platformToCombo(p)
+
+		// then
+		assert.Equal(t, PlatformCombo(0), combo)
+	})
+}
+
+func TestAccumulateByYearEdgeCases(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should track max repos across snapshots", func(t *testing.T) {
+		// given
+		history := &StatsHistory{
+			Version: 1,
+			Snapshots: []DailySnapshot{
+				{
+					Date: "2026-01-15",
+					Platforms: map[PlatformName]PlatformSnapshot{
+						PlatformGitHub: {
+							TotalRepos:         5,
+							Languages:          map[string]int64{},
+							DailyContributions: map[string]int{},
+						},
+					},
+				},
+				{
+					Date: "2026-03-15",
+					Platforms: map[PlatformName]PlatformSnapshot{
+						PlatformGitHub: {
+							TotalRepos:         10,
+							Languages:          map[string]int64{},
+							DailyContributions: map[string]int{},
+						},
+					},
+				},
+			},
+		}
+
+		// when
+		result := accumulateByYear(history)
+
+		// then
+		assert.Equal(t, 10, result[2026][0].Stats.TotalRepos)
+	})
+
+	t.Run("should skip contributions with invalid date", func(t *testing.T) {
+		// given
+		history := &StatsHistory{
+			Version: 1,
+			Snapshots: []DailySnapshot{
+				{
+					Date: "2026-01-15",
+					Platforms: map[PlatformName]PlatformSnapshot{
+						PlatformGitHub: {
+							Languages:          map[string]int64{},
+							DailyContributions: map[string]int{"bad-date": 5, "2026-03-15": 3},
+						},
+					},
+				},
+			},
+		}
+
+		// when
+		result := accumulateByYear(history)
+
+		// then
+		assert.Equal(t, 3, result[2026][0].Stats.DailyContributions["2026-03-15"])
+	})
+}
+
+func TestComboColorScaleCoverage(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return scale for all single-platform combos", func(t *testing.T) {
+		// given
+		combos := []PlatformCombo{comboGitHub, comboGitLab, comboAzureDevOps}
+
+		for _, c := range combos {
+			// when
+			scale := comboColorScale(c)
+
+			// then
+			assert.NotEmpty(t, scale[0])
+		}
+	})
+
+	t.Run("should return blended scale for multi-platform combos", func(t *testing.T) {
+		// given
+		combo := comboGitHub | comboGitLab
+
+		// when
+		scale := comboColorScale(combo)
+
+		// then
+		assert.NotEmpty(t, scale[0])
+	})
+
+	t.Run("should return grey for empty combo", func(t *testing.T) {
+		// when
+		scale := comboColorScale(0)
+
+		// then
+		assert.Equal(t, "#2a2f35", scale[0])
+	})
+}
+
+func TestLoadStatsHistoryErrors(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return error when file contains invalid JSON", func(t *testing.T) {
+		// given
+		dir := t.TempDir()
+		path := filepath.Join(dir, "bad.json")
+		os.WriteFile(path, []byte("not json"), 0644)
+
+		// when
+		history, err := loadStatsHistory(path)
+
+		// then
+		require.Error(t, err)
+		assert.Nil(t, history)
+	})
+
+	t.Run("should return error when file exists but is unreadable", func(t *testing.T) {
+		// given - use a directory as the path to trigger a non-NotExist read error
+		dir := t.TempDir()
+
+		// when
+		history, err := loadStatsHistory(dir)
+
+		// then
+		require.Error(t, err)
+		assert.Nil(t, history)
+	})
+}
+
+func TestColorScale(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return distinct scales for each platform", func(t *testing.T) {
+		// given
+		platforms := []PlatformName{PlatformGitHub, PlatformGitLab, PlatformAzureDevOps}
+
+		for _, p := range platforms {
+			// when
+			scale := p.ColorScale()
+
+			// then
+			assert.NotEmpty(t, scale[0])
+			assert.NotEmpty(t, scale[3])
+			assert.NotEqual(t, scale[0], scale[3])
+		}
+	})
+
+	t.Run("should return grey scale for unknown platform", func(t *testing.T) {
+		// given
+		p := PlatformName("unknown")
+
+		// when
+		scale := p.ColorScale()
+
+		// then
+		assert.Equal(t, "#2a2f35", scale[0])
+	})
+}
+
+func TestSaveStatsHistory(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should save history to file as JSON", func(t *testing.T) {
+		// given
+		dir := t.TempDir()
+		path := filepath.Join(dir, "history.json")
+		history := &StatsHistory{
+			Version: 1,
+			Snapshots: []DailySnapshot{
+				{Date: "2026-03-15", Platforms: map[PlatformName]PlatformSnapshot{}},
+			},
+		}
+
+		// when
+		err := saveStatsHistory(history, path)
+
+		// then
+		require.NoError(t, err)
+		data, _ := os.ReadFile(path)
+		var loaded StatsHistory
+		require.NoError(t, json.Unmarshal(data, &loaded))
+		assert.Equal(t, 1, len(loaded.Snapshots))
+		assert.Equal(t, "2026-03-15", loaded.Snapshots[0].Date)
+	})
+}
+
+func TestSaveStatsHistoryError(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return error when path is invalid", func(t *testing.T) {
+		// given
+		dir := t.TempDir()
+		invalidPath := filepath.Join(dir, "missing-subdir", "history.json")
+		history := &StatsHistory{Version: 1}
+
+		// when
+		err := saveStatsHistory(history, invalidPath)
+
+		// then
+		require.Error(t, err)
+	})
+}
+
+func TestLoadTokenUsage(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should load and sort token usage from file", func(t *testing.T) {
+		// given
+		dir := t.TempDir()
+		path := filepath.Join(dir, "tokens.json")
+		tokens := []TokenUsage{
+			{Date: "2026-03-16", Tokens: 200},
+			{Date: "2026-03-15", Tokens: 100},
+		}
+		data, _ := json.Marshal(tokens)
+		os.WriteFile(path, data, 0644)
+
+		// when
+		result, err := loadTokenUsage(path)
+
+		// then
+		require.NoError(t, err)
+		require.Len(t, result, 2)
+		assert.Equal(t, "2026-03-15", result[0].Date)
+		assert.Equal(t, "2026-03-16", result[1].Date)
+	})
+
+	t.Run("should return error when file does not exist", func(t *testing.T) {
+		// given
+		dir := t.TempDir()
+		missingPath := filepath.Join(dir, "nonexistent.json")
+
+		// when
+		result, err := loadTokenUsage(missingPath)
+
+		// then
+		require.Error(t, err)
+		assert.Nil(t, result)
+	})
+}
+
+func TestGetEnvOrDefault(t *testing.T) {
+	t.Run("should return default when env var is not set", func(t *testing.T) {
+		// when
+		result := getEnvOrDefault("NONEXISTENT_TEST_VAR_XYZ", "fallback")
+
+		// then
+		assert.Equal(t, "fallback", result)
+	})
+
+	t.Run("should return env var value when set", func(t *testing.T) {
+		// given
+		t.Setenv("TEST_GET_ENV_OR_DEFAULT", "custom_value")
+
+		// when
+		result := getEnvOrDefault("TEST_GET_ENV_OR_DEFAULT", "fallback")
+
+		// then
+		assert.Equal(t, "custom_value", result)
+	})
+}
+
+func TestGenerateCombinedStatsSVG(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should write SVG file to disk", func(t *testing.T) {
+		// given
+		dir := t.TempDir()
+		path := filepath.Join(dir, "combined.svg")
+		stats := []NamedPlatformStats{
+			{Platform: PlatformGitHub, Stats: &PlatformStats{
+				TotalCommits: 10, Languages: make(map[string]int64),
+				DailyContributions: make(map[string]int),
+			}},
+		}
+
+		// when
+		err := GenerateCombinedStatsSVG(stats, path)
+
+		// then
+		require.NoError(t, err)
+		data, _ := os.ReadFile(path)
+		assert.Contains(t, string(data), "<svg")
+	})
+}
+
+func TestGenerateTokensHeatmap(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should write SVG file to disk", func(t *testing.T) {
+		// given
+		dir := t.TempDir()
+		path := filepath.Join(dir, "tokens.svg")
+		tokens := []TokenUsage{
+			{Date: "2026-03-15", Tokens: 100},
+			{Date: "2026-03-16", Tokens: 200},
+		}
+
+		// when
+		err := GenerateTokensHeatmap(tokens, path)
+
+		// then
+		require.NoError(t, err)
+		data, _ := os.ReadFile(path)
+		assert.Contains(t, string(data), "<svg")
+	})
+
+	t.Run("should return error with empty tokens", func(t *testing.T) {
+		// given
+		dir := t.TempDir()
+		path := filepath.Join(dir, "tokens.svg")
+
+		// when
+		err := GenerateTokensHeatmap([]TokenUsage{}, path)
+
+		// then
+		require.Error(t, err)
+	})
+}
+
+func TestGenerateLanguagesBarChart(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should write SVG file to disk", func(t *testing.T) {
+		// given
+		dir := t.TempDir()
+		path := filepath.Join(dir, "languages.svg")
+		langs := map[string]map[PlatformName]int64{
+			"Go": {PlatformGitHub: 50000},
+		}
+
+		// when
+		err := GenerateLanguagesBarChart(langs, path)
+
+		// then
+		require.NoError(t, err)
+		data, _ := os.ReadFile(path)
+		assert.Contains(t, string(data), "<svg")
+	})
+}
+
+func TestGenerateContributionHeatmap(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should write SVG file to disk", func(t *testing.T) {
+		// given
+		dir := t.TempDir()
+		path := filepath.Join(dir, "contributions.svg")
+		contribs := map[string]map[PlatformName]int{
+			"2026-03-15": {PlatformGitHub: 3},
+		}
+		start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		end := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
+
+		// when
+		err := GenerateContributionHeatmap(contribs, start, end, path)
+
+		// then
+		require.NoError(t, err)
+		data, _ := os.ReadFile(path)
+		assert.Contains(t, string(data), "<svg")
+	})
+}
+
+func TestLanguageColor(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should return known color for Go", func(t *testing.T) {
+		// when
+		color := languageColor("Go")
+
+		// then
+		assert.NotEqual(t, "#8b949e", color)
+	})
+
+	t.Run("should return default color for unknown language", func(t *testing.T) {
+		// when
+		color := languageColor("NonexistentLang12345")
+
+		// then
+		assert.Equal(t, "#8b949e", color)
 	})
 }
