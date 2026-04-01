@@ -1098,20 +1098,21 @@ func TestFetchAzureDevOpsStats(t *testing.T) {
 				return jsonResponse(http.StatusOK, workItems), nil
 			}
 			// Language fetching phase (fetchAzureDevOpsLanguages)
+			// Note: /commits/{id} (commit detail) must be checked before /commits (commit list)
+			if strings.Contains(path, "/trees/") {
+				return jsonResponse(http.StatusOK, tree), nil
+			}
 			if strings.Contains(query, "defaultBranch") || (strings.Contains(path, "/repositories/") && !strings.Contains(path, "/commits") && !strings.Contains(path, "/trees")) {
 				return jsonResponse(http.StatusOK, repoMeta), nil
 			}
-			if strings.Contains(path, "/commits") && langPhase && strings.Contains(query, "$top=1") {
-				return jsonResponse(http.StatusOK, latestCommit), nil
-			}
-			if strings.Contains(path, "/commits") && langPhase {
-				return jsonResponse(http.StatusOK, allCommits), nil
-			}
-			if strings.Contains(path, "/commits/") {
+			if langPhase && strings.Contains(path, "/commits/") && !strings.Contains(query, "$top") {
 				return jsonResponse(http.StatusOK, commitDetail), nil
 			}
-			if strings.Contains(path, "/trees/") {
-				return jsonResponse(http.StatusOK, tree), nil
+			if langPhase && strings.Contains(path, "/commits") && strings.Contains(query, "$top=1") {
+				return jsonResponse(http.StatusOK, latestCommit), nil
+			}
+			if langPhase && strings.Contains(path, "/commits") {
+				return jsonResponse(http.StatusOK, allCommits), nil
 			}
 			return jsonResponse(http.StatusOK, map[string]interface{}{}), nil
 		})

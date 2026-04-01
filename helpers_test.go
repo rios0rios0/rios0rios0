@@ -886,15 +886,21 @@ func TestUpdateReadmeYearSections(t *testing.T) {
 		dir := t.TempDir()
 		readmePath := filepath.Join(dir, "README.md")
 		content := "<details>\n\t<summary>2025</summary>\n\t<div align=\"center\">\n\t\t<img src=\"x\" />\n\t</div>\n</details>\n"
-		os.WriteFile(readmePath, []byte(content), 0644)
+		if err := os.WriteFile(readmePath, []byte(content), 0644); err != nil {
+			t.Fatalf("failed to create temporary README file: %v", err)
+		}
 		// Make file unwritable
-		os.Chmod(readmePath, 0444)
+		if err := os.Chmod(readmePath, 0444); err != nil {
+			t.Skipf("skipping unwritable README test; chmod not supported or failed: %v", err)
+		}
 
 		// when / then (should not panic, just log)
 		updateReadmeYearSections(readmePath, []int{2024, 2025}, "testuser")
 
 		// cleanup
-		os.Chmod(readmePath, 0644)
+		if err := os.Chmod(readmePath, 0644); err != nil {
+			t.Logf("failed to reset permissions on temporary README file: %v", err)
+		}
 	})
 
 	t.Run("should skip when GitHub username is empty", func(t *testing.T) {
@@ -1134,10 +1140,12 @@ func TestSaveStatsHistoryError(t *testing.T) {
 
 	t.Run("should return error when path is invalid", func(t *testing.T) {
 		// given
+		dir := t.TempDir()
+		invalidPath := filepath.Join(dir, "missing-subdir", "history.json")
 		history := &StatsHistory{Version: 1}
 
 		// when
-		err := saveStatsHistory(history, "/nonexistent/dir/history.json")
+		err := saveStatsHistory(history, invalidPath)
 
 		// then
 		require.Error(t, err)
@@ -1169,8 +1177,12 @@ func TestLoadTokenUsage(t *testing.T) {
 	})
 
 	t.Run("should return error when file does not exist", func(t *testing.T) {
+		// given
+		dir := t.TempDir()
+		missingPath := filepath.Join(dir, "nonexistent.json")
+
 		// when
-		result, err := loadTokenUsage("/nonexistent/path.json")
+		result, err := loadTokenUsage(missingPath)
 
 		// then
 		require.Error(t, err)
