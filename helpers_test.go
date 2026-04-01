@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -773,5 +774,116 @@ func TestFetchAzureDevOpsLanguages(t *testing.T) {
 
 		// then
 		assert.Empty(t, stats.Languages)
+	})
+}
+
+func TestFormatYearBlock(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should produce well-formatted HTML block with correct URLs", func(t *testing.T) {
+		// given
+		year := 2025
+		ghUsername := "testuser"
+
+		// when
+		result := formatYearBlock(year, ghUsername)
+
+		// then
+		assert.Contains(t, result, "<details>")
+		assert.Contains(t, result, "<summary>2025</summary>")
+		assert.Contains(t, result, "https://raw.githubusercontent.com/testuser/testuser/stats/combined_stats_2025.svg")
+		assert.Contains(t, result, "https://raw.githubusercontent.com/testuser/testuser/stats/top_languages_2025.svg")
+		assert.Contains(t, result, "https://raw.githubusercontent.com/testuser/testuser/stats/contributions_2025.svg")
+		assert.Contains(t, result, `height="220"`)
+		assert.Contains(t, result, "</details>")
+		// Contributions image should NOT have height="220"
+		lines := strings.Split(result, "\n")
+		for _, line := range lines {
+			if strings.Contains(line, "contributions_2025.svg") {
+				assert.NotContains(t, line, `height="220"`)
+			}
+		}
+	})
+}
+
+func TestUpdateReadmeYearSections(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should insert new year in correct descending position", func(t *testing.T) {
+		// given
+		dir := t.TempDir()
+		readmePath := filepath.Join(dir, "README.md")
+		content := "<details>\n\t<summary>2025</summary>\n\t<div align=\"center\">\n\t\t<img src=\"x\" />\n\t</div>\n</details>\n" +
+			"<details>\n\t<summary>2023</summary>\n\t<div align=\"center\">\n\t\t<img src=\"x\" />\n\t</div>\n</details>\n"
+		os.WriteFile(readmePath, []byte(content), 0644)
+
+		// when
+		updateReadmeYearSections(readmePath, []int{2023, 2024, 2025}, "testuser")
+
+		// then
+		data, _ := os.ReadFile(readmePath)
+		result := string(data)
+		pos2025 := strings.Index(result, "<summary>2025</summary>")
+		pos2024 := strings.Index(result, "<summary>2024</summary>")
+		pos2023 := strings.Index(result, "<summary>2023</summary>")
+		assert.Greater(t, pos2024, pos2025, "2024 should come after 2025")
+		assert.Greater(t, pos2023, pos2024, "2023 should come after 2024")
+	})
+
+	t.Run("should skip when all years already exist", func(t *testing.T) {
+		// given
+		dir := t.TempDir()
+		readmePath := filepath.Join(dir, "README.md")
+		content := "<details>\n\t<summary>2025</summary>\n\t<div align=\"center\">\n\t\t<img src=\"x\" />\n\t</div>\n</details>\n"
+		os.WriteFile(readmePath, []byte(content), 0644)
+
+		// when
+		updateReadmeYearSections(readmePath, []int{2025}, "testuser")
+
+		// then
+		data, _ := os.ReadFile(readmePath)
+		assert.Equal(t, content, string(data))
+	})
+
+	t.Run("should handle missing README gracefully", func(t *testing.T) {
+		// given
+		dir := t.TempDir()
+		readmePath := filepath.Join(dir, "NONEXISTENT.md")
+
+		// when / then (should not panic)
+		updateReadmeYearSections(readmePath, []int{2025}, "testuser")
+	})
+
+	t.Run("should append at end when new year is oldest", func(t *testing.T) {
+		// given
+		dir := t.TempDir()
+		readmePath := filepath.Join(dir, "README.md")
+		content := "<details>\n\t<summary>2025</summary>\n\t<div align=\"center\">\n\t\t<img src=\"x\" />\n\t</div>\n</details>\n"
+		os.WriteFile(readmePath, []byte(content), 0644)
+
+		// when
+		updateReadmeYearSections(readmePath, []int{2024, 2025}, "testuser")
+
+		// then
+		data, _ := os.ReadFile(readmePath)
+		result := string(data)
+		pos2025 := strings.Index(result, "<summary>2025</summary>")
+		pos2024 := strings.Index(result, "<summary>2024</summary>")
+		assert.Greater(t, pos2024, pos2025, "2024 should come after 2025")
+	})
+
+	t.Run("should skip when GitHub username is empty", func(t *testing.T) {
+		// given
+		dir := t.TempDir()
+		readmePath := filepath.Join(dir, "README.md")
+		content := "<details>\n\t<summary>2025</summary>\n\t<div align=\"center\">\n\t\t<img src=\"x\" />\n\t</div>\n</details>\n"
+		os.WriteFile(readmePath, []byte(content), 0644)
+
+		// when
+		updateReadmeYearSections(readmePath, []int{2024, 2025}, "")
+
+		// then
+		data, _ := os.ReadFile(readmePath)
+		assert.Equal(t, content, string(data))
 	})
 }
