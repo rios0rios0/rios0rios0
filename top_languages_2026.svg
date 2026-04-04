@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="495" height="260" viewBox="0 0 495 260" fill="none" role="img">
+<title>Top Languages</title>
+<style>
+	.header { font: 600 14px 'Segoe UI', Ubuntu, Sans-Serif; fill: #fff; }
+	.stat { font: 400 12px 'Segoe UI', Ubuntu, Sans-Serif; fill: #c9d1d9; }
+	.bold { font-weight: 700; font-size: 12px; fill: #9f9f9f; }
+	.icon { fill: #79ff97; display: block; }
+	.legend-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
+	.stagger { opacity: 0; animation: fadeInAnimation 0.3s ease-in-out forwards; }
+	@keyframes fadeInAnimation { from { opacity: 0; } to { opacity: 1; } }
+</style>
+<rect data-testid="card-bg" x="0.5" y="0.5" rx="4.5" height="99%" width="494" fill="#151515" stroke="#e4e2e2" stroke-opacity="0.2"/>
+<g data-testid="card-title" transform="translate(25, 25)">
+	<text x="0" y="0" class="header" data-testid="header">Top Languages (across all platforms)</text>
+</g>
+<g class="stagger" style="animation-delay: 450ms" transform="translate(25, 45)"><circle cx="7" cy="8" r="6" fill="#00ADD8"/><text class="stat" x="20" y="12.5">Go</text><rect x="210" y="0" width="119" height="16" rx="2" fill="#238636"><title>GitHub: 79.8%</title></rect><rect x="329" y="0" width="31" height="16" rx="2" fill="#0078d4"><title>Azure DevOps: 20.2%</title></rect><text class="stat bold" x="445" y="12.5" text-anchor="end">50.5%</text></g><g class="stagger" style="animation-delay: 600ms" transform="translate(25, 73)"><circle cx="7" cy="8" r="6" fill="#4F5D95"/><text class="stat" x="20" y="12.5">PHP</text><rect x="210" y="0" width="71" height="16" rx="2" fill="#0078d4"><title>Azure DevOps: 100.0%</title></rect><text class="stat bold" x="445" y="12.5" text-anchor="end">24.0%</text></g><g class="stagger" style="animation-delay: 750ms" transform="translate(25, 101)"><circle cx="7" cy="8" r="6" fill="#cb171e"/><text class="stat" x="20" y="12.5">YAML</text><rect x="210" y="0" width="29" height="16" rx="2" fill="#0078d4"><title>Azure DevOps: 100.0%</title></rect><text class="stat bold" x="445" y="12.5" text-anchor="end">9.8%</text></g><g class="stagger" style="animation-delay: 900ms" transform="translate(25, 129)"><circle cx="7" cy="8" r="6" fill="#E3F171"/><text class="stat" x="20" y="12.5">Pascal</text><rect x="210" y="0" width="23" height="16" rx="2" fill="#238636"><title>GitHub: 100.0%</title></rect><text class="stat bold" x="445" y="12.5" text-anchor="end">8.0%</text></g><g class="stagger" style="animation-delay: 1050ms" transform="translate(25, 157)"><circle cx="7" cy="8" r="6" fill="#563d7c"/><text class="stat" x="20" y="12.5">CSS</text><rect x="210" y="0" width="23" height="16" rx="2" fill="#0078d4"><title>Azure DevOps: 100.0%</title></rect><text class="stat bold" x="445" y="12.5" text-anchor="end">7.8%</text></g>
+<rect x="25" y="230" width="10" height="10" rx="2" fill="#238636"/><text x="39" y="239" class="legend-label">GitHub</text><rect x="93" y="230" width="10" height="10" rx="2" fill="#e24329"/><text x="107" y="239" class="legend-label">GitLab</text><rect x="161" y="230" width="10" height="10" rx="2" fill="#0078d4"/><text x="175" y="239" class="legend-label">Azure DevOps</text>
+</svg>
