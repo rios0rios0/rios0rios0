@@ -10,6 +10,16 @@
 </div>
 
 <details>
+	<summary>2026</summary>
+	<div align="center">
+		<img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_2026.svg" height="220" alt="2026 combined stats" />
+		<img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/top_languages_2026.svg" height="220" alt="2026 top languages" />
+	</div>
+	<div align="center">
+		<img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/contributions_2026.svg" alt="2026 contributions" />
+	</div>
+</details>
+<details>
 	<summary>2025</summary>
 	<div align="center">
 		<img src="https://raw.githubusercontent.com/rios0rios0/rios0rios0/stats/combined_stats_2025.svg" height="220" alt="2025 combined stats" />
