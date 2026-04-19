@@ -2274,7 +2274,7 @@ func updateReadmeYearSections(readmePath string, years []int, ghUsername string,
 	}
 
 	if len(newYears) == 0 {
-		logger.Info("all years already present in README, no updates needed")
+		logger.Info("no new collapsed year sections needed for README")
 		return
 	}
 
