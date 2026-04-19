@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Fixed
+
+- fixed `recalculate` workflow inserting a duplicate collapsed `<details>` block for the current year in `README.md`, which opened an unwanted PR when `TARGET_YEAR` matched the current year
+
 ## [0.2.1] - 2026-04-15
 
 ### Changed

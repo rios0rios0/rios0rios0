@@ -741,8 +741,8 @@ func TestFetchAzureDevOpsLanguages(t *testing.T) {
 		assert.Equal(t, int64(5000), stats.Languages["Go"])
 		assert.Equal(t, int64(3000), stats.Languages["TypeScript"])
 		assert.Zero(t, stats.Languages["JavaScript"]) // node_modules + dist excluded
-		assert.Zero(t, stats.Languages["JSON"])        // package-lock.json excluded
-		assert.Zero(t, stats.Languages["Swift"])       // Pods/ excluded
+		assert.Zero(t, stats.Languages["JSON"])       // package-lock.json excluded
+		assert.Zero(t, stats.Languages["Swift"])      // Pods/ excluded
 	})
 
 	t.Run("should skip repos with no commits", func(t *testing.T) {
@@ -818,7 +818,7 @@ func TestUpdateReadmeYearSections(t *testing.T) {
 		os.WriteFile(readmePath, []byte(content), 0644)
 
 		// when
-		updateReadmeYearSections(readmePath, []int{2023, 2024, 2025}, "testuser")
+		updateReadmeYearSections(readmePath, []int{2023, 2024, 2025}, "testuser", 2026)
 
 		// then
 		data, _ := os.ReadFile(readmePath)
@@ -830,6 +830,40 @@ func TestUpdateReadmeYearSections(t *testing.T) {
 		assert.Greater(t, pos2023, pos2024, "2023 should come after 2024")
 	})
 
+	t.Run("should skip current year so collapsed section is not duplicated with _final.svg", func(t *testing.T) {
+		// given
+		dir := t.TempDir()
+		readmePath := filepath.Join(dir, "README.md")
+		content := "<details>\n\t<summary>2025</summary>\n\t<div align=\"center\">\n\t\t<img src=\"x\" />\n\t</div>\n</details>\n"
+		os.WriteFile(readmePath, []byte(content), 0644)
+
+		// when: recalculate for the current year (2026)
+		updateReadmeYearSections(readmePath, []int{2025, 2026}, "testuser", 2026)
+
+		// then: README is untouched; no <summary>2026</summary> inserted
+		data, _ := os.ReadFile(readmePath)
+		result := string(data)
+		assert.Equal(t, content, result)
+		assert.NotContains(t, result, "<summary>2026</summary>")
+	})
+
+	t.Run("should insert previous year when running from next year", func(t *testing.T) {
+		// given: README already has 2025; we're now in 2027 and history has 2025 and 2026
+		dir := t.TempDir()
+		readmePath := filepath.Join(dir, "README.md")
+		content := "<details>\n\t<summary>2025</summary>\n\t<div align=\"center\">\n\t\t<img src=\"x\" />\n\t</div>\n</details>\n"
+		os.WriteFile(readmePath, []byte(content), 0644)
+
+		// when
+		updateReadmeYearSections(readmePath, []int{2025, 2026, 2027}, "testuser", 2027)
+
+		// then: 2026 is inserted, 2027 (current year) is skipped
+		data, _ := os.ReadFile(readmePath)
+		result := string(data)
+		assert.Contains(t, result, "<summary>2026</summary>")
+		assert.NotContains(t, result, "<summary>2027</summary>")
+	})
+
 	t.Run("should skip when all years already exist", func(t *testing.T) {
 		// given
 		dir := t.TempDir()
@@ -838,7 +872,7 @@ func TestUpdateReadmeYearSections(t *testing.T) {
 		os.WriteFile(readmePath, []byte(content), 0644)
 
 		// when
-		updateReadmeYearSections(readmePath, []int{2025}, "testuser")
+		updateReadmeYearSections(readmePath, []int{2025}, "testuser", 2026)
 
 		// then
 		data, _ := os.ReadFile(readmePath)
@@ -851,7 +885,7 @@ func TestUpdateReadmeYearSections(t *testing.T) {
 		readmePath := filepath.Join(dir, "NONEXISTENT.md")
 
 		// when / then (should not panic)
-		updateReadmeYearSections(readmePath, []int{2025}, "testuser")
+		updateReadmeYearSections(readmePath, []int{2025}, "testuser", 2026)
 	})
 
 	t.Run("should append at end when new year is oldest", func(t *testing.T) {
@@ -862,7 +896,7 @@ func TestUpdateReadmeYearSections(t *testing.T) {
 		os.WriteFile(readmePath, []byte(content), 0644)
 
 		// when
-		updateReadmeYearSections(readmePath, []int{2024, 2025}, "testuser")
+		updateReadmeYearSections(readmePath, []int{2024, 2025}, "testuser", 2026)
 
 		// then
 		data, _ := os.ReadFile(readmePath)
@@ -878,7 +912,7 @@ func TestUpdateReadmeYearSections(t *testing.T) {
 		readmePath := dir // a directory, not a file
 
 		// when / then (should not panic)
-		updateReadmeYearSections(readmePath, []int{2025}, "testuser")
+		updateReadmeYearSections(readmePath, []int{2025}, "testuser", 2026)
 	})
 
 	t.Run("should handle unwritable README gracefully", func(t *testing.T) {
@@ -895,7 +929,7 @@ func TestUpdateReadmeYearSections(t *testing.T) {
 		}
 
 		// when / then (should not panic, just log)
-		updateReadmeYearSections(readmePath, []int{2024, 2025}, "testuser")
+		updateReadmeYearSections(readmePath, []int{2024, 2025}, "testuser", 2026)
 
 		// cleanup
 		if err := os.Chmod(readmePath, 0644); err != nil {
@@ -911,7 +945,7 @@ func TestUpdateReadmeYearSections(t *testing.T) {
 		os.WriteFile(readmePath, []byte(content), 0644)
 
 		// when
-		updateReadmeYearSections(readmePath, []int{2024, 2025}, "")
+		updateReadmeYearSections(readmePath, []int{2024, 2025}, "", 2026)
 
 		// then
 		data, _ := os.ReadFile(readmePath)
