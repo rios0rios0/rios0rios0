@@ -2230,7 +2230,7 @@ func formatYearBlock(year int, ghUsername string) string {
 	)
 }
 
-func updateReadmeYearSections(readmePath string, years []int, ghUsername string) {
+func updateReadmeYearSections(readmePath string, years []int, ghUsername string, currentYear int) {
 	if ghUsername == "" {
 		logger.Info("no GitHub username configured, skipping README year section update")
 		return
@@ -2260,9 +2260,14 @@ func updateReadmeYearSections(readmePath string, years []int, ghUsername string)
 		}
 	}
 
-	// Find new years to insert
+	// Find new years to insert. The current year is represented by the top
+	// "_final.svg" section, so it never gets its own collapsed <details> block.
 	var newYears []int
 	for _, y := range years {
+		if y == currentYear {
+			logger.WithField("year", y).Info("skipping current year for README collapsed section; handled by _final.svg")
+			continue
+		}
 		if !existingYears[y] {
 			newYears = append(newYears, y)
 		}
@@ -2646,7 +2651,7 @@ func main() {
 
 	// 6.5. Update README with any new year sections
 	readmePath := getEnvOrDefault("README_PATH", "README.md")
-	updateReadmeYearSections(readmePath, years, ghUsername)
+	updateReadmeYearSections(readmePath, years, ghUsername, currentYear)
 
 	// 7. Generate Claude Code tokens heatmap (not year-based)
 	tokenData, err := loadTokenUsage("claude_tokens.json")
