@@ -99,11 +99,12 @@ All workflows check out `main`, restore `stats_history.json` from the `stats` br
 ├── CONTRIBUTING.md                   # Contribution guidelines
 ├── stats_history.json                # Daily snapshots (on stats branch)
 ├── claude_tokens.json                # Token usage data (on stats branch)
-├── .github/
-│   ├── copilot-instructions.md       # This file
-│   └── workflows/
-│       ├── update-stats.yml          # Daily stats workflow
-│       ├── bootstrap-stats.yml       # Bootstrap workflow
-│       └── recalculate-stats.yml     # Recalculate workflow
-└── .assets/                          # Custom SVG icons
+└── .github/
+    ├── copilot-instructions.md       # This file
+    └── workflows/
+        ├── update-stats.yml          # Daily stats workflow
+        ├── bootstrap-stats.yml       # Bootstrap workflow
+        ├── recalculate-stats.yml     # Recalculate workflow
+        ├── claude-code-review.yaml   # Automated PR review via Claude Code
+        └── claude.yaml               # Interactive Claude Code on issues/comments
 ```

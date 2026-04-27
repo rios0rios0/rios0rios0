@@ -45,6 +45,7 @@ Path configuration (defaults work for local development):
 |----------------------|----------------------|------------------------------------------------------------|
 | `RUN_MODE`           | `daily`              | Operating mode: `daily`, `bootstrap`, or `recalculate`     |
 | `TARGET_YEAR`        | (none)               | Year to recalculate (required when `RUN_MODE=recalculate`) |
+| `LOG_LEVEL`          | `info`               | Log verbosity: `info` or `debug`                           |
 | `STATS_HISTORY_PATH` | `stats_history.json` | Path to read/write historical snapshots                    |
 | `SVG_OUTPUT_DIR`     | `.`                  | Directory for generated SVG files                          |
 | `README_PATH`        | `README.md`          | Path to README for auto-inserting new year sections        |
@@ -90,13 +91,17 @@ Per-year SVGs (e.g., `combined_stats_2026.svg`) plus `_final.svg` aliases pointi
 
 ## CI/CD
 
-Three workflows in `.github/workflows/`:
+Five workflows in `.github/workflows/`. Three handle stats generation:
 - **`update-stats.yml`**: Runs daily at midnight UTC via `schedule` and can be triggered manually via `workflow_dispatch`. `RUN_MODE=daily`.
 - **`bootstrap-stats.yml`**: Manual dispatch only. `RUN_MODE=bootstrap`. Full current-year fetch with languages.
 - **`recalculate-stats.yml`**: Manual dispatch only with `year` input. `RUN_MODE=recalculate`. Re-fetches all data for the given year, replaces that year's snapshots, and regenerates SVGs for all years.
 
-All workflows check out `main`, restore `stats_history.json` from the `stats` branch, run the generator, and force-push an orphan commit to `stats`.
+All stats workflows check out `main`, restore `stats_history.json` from the `stats` branch, run the generator, and force-push an orphan commit to `stats`.
+
+Two handle Claude Code CI (both delegate to reusable workflows in `rios0rios0/.github`):
+- **`claude-code-review.yaml`**: Runs on pull request events for automated code review.
+- **`claude.yaml`**: Runs on issue/comment/review events for interactive Claude Code assistance.
 
 ## Stale Documentation
 
-`.github/copilot-instructions.md` and `CONTRIBUTING.md` are outdated -- they reference the old template-based SVG approach, claim no tests exist, and list old workflow files. Use this CLAUDE.md as the source of truth.
+`CONTRIBUTING.md` is outdated -- it references old SVG filenames and omits the `-tags=unit` build tag for tests. Use this CLAUDE.md as the source of truth.
