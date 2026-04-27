@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Go application that fetches user statistics from GitHub, GitLab, and Azure DevOps APIs and generates SVG visualizations for a GitHub profile README. Persists daily snapshots to `stats_history.json` for historical accumulation, then generates per-year SVG widgets. Runs daily via GitHub Actions, outputting to the `stats` branch.
 
-Single-file Go app (`main.go` only -- no `cmd/`, `internal/`, or multi-package structure). Requires Go 1.26+. Direct dependencies: `golang.org/x/text` (number formatting) and `stretchr/testify` (testing).
+Single-file Go app (`main.go` only -- no `cmd/`, `internal/`, or multi-package structure). Requires Go 1.26+. Direct dependencies: `sirupsen/logrus` (logging) and `stretchr/testify` (testing).
 
 ## Build and Test Commands
 
@@ -62,7 +62,8 @@ Single-package monolith (`package main` in `main.go`). Key components:
   - `renderLanguagesBarChart(map[string]map[PlatformName]int64)` -- stacked bar chart
   - `renderContributionHeatmap(contribs, startDate, endDate)` -- heatmap with full year range
 - **Run modes**: `daily` (today only, reuses languages), `bootstrap` (full current year), `recalculate` (full target year, replaces all snapshots for that year via `removeSnapshotsForYear`, regenerates SVGs for all years)
-- **`main()` flow**: Load history -> fetch platforms (parallel) -> save snapshot -> accumulate by year -> generate per-year SVGs (full year range) -> copy current year to `_final.svg` -> generate tokens graph
+- **README updater** (`updateReadmeYearSections`): After generating per-year SVGs, auto-inserts new year `<details>` blocks into `README.md` in descending order. Skips the current year (handled by `_final.svg`).
+- **`main()` flow**: Load history -> fetch platforms (parallel) -> save snapshot -> accumulate by year -> generate per-year SVGs (full year range) -> copy current year to `_final.svg` -> update README year sections -> generate tokens graph
 
 Platform colors: GitHub `#238636`, GitLab `#e24329`, Azure DevOps `#0078d4`. Unified card chrome: `rx="4.5"`, `fill="#151515"`, `stroke="#e4e2e2"`, `stroke-opacity="0.2"`.
 
@@ -73,7 +74,7 @@ Platform colors: GitHub `#238636`, GitLab `#e24329`, Azure DevOps `#0078d4`. Uni
 - Tests are parallel (`t.Parallel()` + `t.Run()`)
 - BDD structure with `// given`, `// when`, `// then` comments
 - SVG output validated as well-formed XML via `assertValidSVGXML` helper
-- Two test files: `helpers_test.go` (formatNumber, aggregation, history persistence, year accumulation) and `svg_generators_test.go` (all four SVG renderers, year tabs)
+- Three test files: `fetchers_test.go` (platform fetcher HTTP mocking), `helpers_test.go` (formatNumber, aggregation, history persistence, year accumulation), and `svg_generators_test.go` (all four SVG renderers, year tabs)
 
 ## Generated Output Files
 

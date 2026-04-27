@@ -2,7 +2,7 @@
 
 Go application that fetches user statistics from GitHub, GitLab, and Azure DevOps APIs and generates SVG visualizations for a GitHub profile README. Persists daily snapshots to `stats_history.json` for historical accumulation, then generates per-year SVG widgets. Runs daily via GitHub Actions, outputting to the `stats` branch.
 
-Single-file Go app (`main.go` only). Requires Go 1.26+. Direct dependencies: `golang.org/x/text` (number formatting) and `stretchr/testify` (testing).
+Single-file Go app (`main.go` only). Requires Go 1.26+. Direct dependencies: `sirupsen/logrus` (logging) and `stretchr/testify` (testing).
 
 ## Build and Test Commands
 
@@ -61,7 +61,7 @@ Single-package monolith (`package main` in `main.go`). Key components:
 - Uses `stretchr/testify` for assertions (`assert`, `require`)
 - Tests are parallel (`t.Parallel()` + `t.Run()`)
 - BDD structure with `// given`, `// when`, `// then` comments
-- Two test files: `helpers_test.go` and `svg_generators_test.go`
+- Three test files: `fetchers_test.go` (platform fetcher HTTP mocking), `helpers_test.go` (helpers and utilities), and `svg_generators_test.go` (SVG renderers)
 
 ## Generated Output Files
 
@@ -88,6 +88,7 @@ All workflows check out `main`, restore `stats_history.json` from the `stats` br
 
 ```
 ├── main.go                           # Single-file application
+├── fetchers_test.go                  # Unit tests for platform fetchers
 ├── helpers_test.go                   # Unit tests for helpers and utilities
 ├── svg_generators_test.go            # Unit tests for SVG renderers
 ├── go.mod / go.sum                   # Go module definition
