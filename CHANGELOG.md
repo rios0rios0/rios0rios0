@@ -16,6 +16,8 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-04-28
+
 ### Changed
 
 - refreshed `CLAUDE.md` and `.github/copilot-instructions.md` to correct dependency listing (`sirupsen/logrus` replaced `golang.org/x/text`), document `fetchers_test.go`, and add the README updater to the architecture section
