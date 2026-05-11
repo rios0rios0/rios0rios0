@@ -54,14 +54,14 @@ Path configuration (defaults work for local development):
 
 Single-package monolith (`package main` in `main.go`). Key components:
 
-- **History system** (`StatsHistory`, `DailySnapshot`, `PlatformSnapshot`): JSON-based persistence. Each daily run saves a snapshot with per-platform stats. `accumulateByYear()` builds per-year views by scanning all snapshots, merging languages (max bytes per language across snapshots) and collecting contributions by year (max per date).
+- **History system** (`StatsHistory`, `DailySnapshot`, `PlatformSnapshot`): JSON-based persistence. Each daily run saves a snapshot with per-platform stats. `accumulateByYear()` builds per-year views by scanning all snapshots, merging languages (max bytes per language across snapshots) and collecting contributions by year (max per platform per date).
 - **Platform types** (`PlatformName`, `NamedPlatformStats`): Typed platform identity with color/color-scale methods. Order: GitHub, GitLab, Azure DevOps.
 - **Platform fetchers** (`FetchGitHubStats`, `FetchGitLabStats`, `FetchAzureDevOpsStats`): HTTP clients returning `*PlatformStats`. Run in parallel via goroutines. GitHub uses GraphQL for contributions. Language data is filtered to repos with activity in the last year (GitHub: `pushed_at`, GitLab: `last_activity_at`, Azure DevOps: file extension analysis from repo trees). All fail gracefully (skip platform on error).
 - **SVG renderers**: Pure functions returning SVG strings. Each has a `Generate*` wrapper for disk I/O.
   - `renderCombinedStatsSVG([]NamedPlatformStats)` -- stats card with stacked bars
   - `renderTokensHeatmap([]TokenUsage)` -- token usage line graph (named "heatmap" historically)
   - `renderLanguagesBarChart(map[string]map[PlatformName]int64)` -- stacked bar chart
-  - `renderContributionHeatmap(contribs, startDate, endDate)` -- heatmap with full year range
+  - `renderContributionHeatmap(map[string]map[PlatformName]int, startDate, endDate)` -- heatmap with full year range, per-platform color blending via `PlatformCombo` bitmask
 - **Run modes**: `daily` (today only, reuses languages), `bootstrap` (full current year), `recalculate` (full target year, replaces all snapshots for that year via `removeSnapshotsForYear`, regenerates SVGs for all years)
 - **README updater** (`updateReadmeYearSections`): After generating per-year SVGs, auto-inserts new year `<details>` blocks into `README.md` in descending order. Skips the current year (handled by `_final.svg`).
 - **`main()` flow**: Load history -> fetch platforms (parallel) -> save snapshot -> accumulate by year -> generate per-year SVGs (full year range) -> copy current year to `_final.svg` -> update README year sections -> generate tokens graph
@@ -91,7 +91,7 @@ Per-year SVGs (e.g., `combined_stats_2026.svg`) plus `_final.svg` aliases pointi
 
 ## CI/CD
 
-Five workflows in `.github/workflows/`. Three handle stats generation:
+Six workflows in `.github/workflows/`. Three handle stats generation:
 - **`update-stats.yml`**: Runs daily at midnight UTC via `schedule` and can be triggered manually via `workflow_dispatch`. `RUN_MODE=daily`.
 - **`bootstrap-stats.yml`**: Manual dispatch only. `RUN_MODE=bootstrap`. Full current-year fetch with languages.
 - **`recalculate-stats.yml`**: Manual dispatch only with `year` input. `RUN_MODE=recalculate`. Re-fetches all data for the given year, replaces that year's snapshots, and regenerates SVGs for all years.
@@ -101,6 +101,9 @@ All stats workflows check out `main`, restore `stats_history.json` from the `sta
 Two handle Claude Code CI (both delegate to reusable workflows in `rios0rios0/.github`):
 - **`claude-code-review.yaml`**: Runs on pull request events for automated code review.
 - **`claude.yaml`**: Runs on issue/comment/review events for interactive Claude Code assistance.
+
+One handles releases (delegates to a reusable workflow in `rios0rios0/pipelines`):
+- **`release.yaml`**: Runs on push to `main`. Auto-creates releases.
 
 ## Stale Documentation
 

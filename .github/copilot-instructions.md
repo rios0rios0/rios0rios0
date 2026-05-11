@@ -41,6 +41,7 @@ Path configuration (defaults work for local development):
 |----------------------|----------------------|------------------------------------------------------------|
 | `RUN_MODE`           | `daily`              | Operating mode: `daily`, `bootstrap`, or `recalculate`     |
 | `TARGET_YEAR`        | (none)               | Year to recalculate (required when `RUN_MODE=recalculate`) |
+| `LOG_LEVEL`          | `info`               | Log verbosity: `info` or `debug`                           |
 | `STATS_HISTORY_PATH` | `stats_history.json` | Path to read/write historical snapshots                    |
 | `SVG_OUTPUT_DIR`     | `.`                  | Directory for generated SVG files                          |
 | `README_PATH`        | `README.md`          | Path to README for auto-inserting new year sections        |
@@ -77,12 +78,19 @@ Per-year SVGs plus `_final.svg` aliases pointing to the current year:
 
 ## CI/CD
 
-Three workflows in `.github/workflows/`:
-- **`update-stats.yml`**: Runs daily at midnight UTC. `RUN_MODE=daily`.
+Six workflows in `.github/workflows/`. Three handle stats generation:
+- **`update-stats.yml`**: Runs daily at midnight UTC and via `workflow_dispatch`. `RUN_MODE=daily`.
 - **`bootstrap-stats.yml`**: Manual dispatch only. `RUN_MODE=bootstrap`.
 - **`recalculate-stats.yml`**: Manual dispatch with `year` input. `RUN_MODE=recalculate`.
 
-All workflows check out `main`, restore `stats_history.json` from the `stats` branch, run the generator, and force-push an orphan commit to `stats`.
+All stats workflows check out `main`, restore `stats_history.json` from the `stats` branch, run the generator, and force-push an orphan commit to `stats`.
+
+Two handle Claude Code CI (both delegate to reusable workflows in `rios0rios0/.github`):
+- **`claude-code-review.yaml`**: Runs on pull request events for automated code review.
+- **`claude.yaml`**: Runs on issue/comment/review events for interactive Claude Code assistance.
+
+One handles releases (delegates to a reusable workflow in `rios0rios0/pipelines`):
+- **`release.yaml`**: Runs on push to `main`. Auto-creates releases.
 
 ## Repository Structure
 
@@ -106,5 +114,6 @@ All workflows check out `main`, restore `stats_history.json` from the `stats` br
         ├── bootstrap-stats.yml       # Bootstrap workflow
         ├── recalculate-stats.yml     # Recalculate workflow
         ├── claude-code-review.yaml   # Automated PR review via Claude Code
-        └── claude.yaml               # Interactive Claude Code on issues/comments
+        ├── claude.yaml               # Interactive Claude Code on issues/comments
+        └── release.yaml              # Auto-release on push to main
 ```
