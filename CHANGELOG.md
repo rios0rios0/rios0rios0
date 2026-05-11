@@ -19,6 +19,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Changed
 
 - changed the Go module dependencies to their latest versions
+- refreshed `CLAUDE.md` to document the `release.yaml` workflow, per-platform contribution heatmap signature, and `PlatformCombo` color blending; updated `.github/copilot-instructions.md` to add `LOG_LEVEL` env var, document all six workflows, and add `release.yaml` to the repository structure
 
 ## [0.2.4] - 2026-05-08
 
