@@ -19,6 +19,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Changed
 
 - changed the Go module dependencies to their latest versions
+- refreshed `CLAUDE.md` and `.github/copilot-instructions.md` to document the `release.yaml` workflow, correct the workflow count, and add the missing `LOG_LEVEL` env var to copilot instructions
 
 ## [0.2.4] - 2026-05-08
 

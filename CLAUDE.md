@@ -91,7 +91,7 @@ Per-year SVGs (e.g., `combined_stats_2026.svg`) plus `_final.svg` aliases pointi
 
 ## CI/CD
 
-Five workflows in `.github/workflows/`. Three handle stats generation:
+Six workflows in `.github/workflows/`. Three handle stats generation:
 - **`update-stats.yml`**: Runs daily at midnight UTC via `schedule` and can be triggered manually via `workflow_dispatch`. `RUN_MODE=daily`.
 - **`bootstrap-stats.yml`**: Manual dispatch only. `RUN_MODE=bootstrap`. Full current-year fetch with languages.
 - **`recalculate-stats.yml`**: Manual dispatch only with `year` input. `RUN_MODE=recalculate`. Re-fetches all data for the given year, replaces that year's snapshots, and regenerates SVGs for all years.
@@ -101,6 +101,9 @@ All stats workflows check out `main`, restore `stats_history.json` from the `sta
 Two handle Claude Code CI (both delegate to reusable workflows in `rios0rios0/.github`):
 - **`claude-code-review.yaml`**: Runs on pull request events for automated code review.
 - **`claude.yaml`**: Runs on issue/comment/review events for interactive Claude Code assistance.
+
+One handles releases (delegates to a reusable workflow in `rios0rios0/pipelines`):
+- **`release.yaml`**: Triggers on push to `main`.
 
 ## Stale Documentation
 
