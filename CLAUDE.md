@@ -75,7 +75,7 @@ Platform colors: GitHub `#238636`, GitLab `#e24329`, Azure DevOps `#0078d4`. Uni
 - Tests are parallel (`t.Parallel()` + `t.Run()`)
 - BDD structure with `// given`, `// when`, `// then` comments
 - SVG output validated as well-formed XML via `assertValidSVGXML` helper
-- Three test files: `fetchers_test.go` (platform fetcher HTTP mocking), `helpers_test.go` (formatNumber, aggregation, history persistence, year accumulation), and `svg_generators_test.go` (all four SVG renderers, year tabs)
+- Three test files: `fetchers_test.go` (platform fetcher HTTP mocking), `helpers_test.go` (formatNumber, aggregation, history persistence, year accumulation), and `svg_generators_test.go` (all four SVG renderers, combo color scales)
 
 ## Generated Output Files
 
