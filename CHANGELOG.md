@@ -16,6 +16,10 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+### Changed
+
+- refreshed `CLAUDE.md` to correct the `svg_generators_test.go` description, which referenced a non-existent "year tabs" test instead of its combo color scale coverage
+
 ## [0.2.6] - 2026-05-22
 
 ### Changed
