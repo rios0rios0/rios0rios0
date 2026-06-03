@@ -19,6 +19,7 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 ### Changed
 
 - refreshed `CLAUDE.md` to correct the `svg_generators_test.go` description, which referenced a non-existent "year tabs" test instead of its combo color scale coverage
+- changed the Go version to `1.26.4` and updated all module dependencies
 
 ## [0.2.6] - 2026-05-22
 
