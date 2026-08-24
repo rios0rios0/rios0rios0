@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Go application that fetches user statistics from GitHub, GitLab, and Azure DevOps APIs and generates SVG visualizations for a GitHub profile README. Persists daily snapshots to `stats_history.json` for historical accumulation, then generates per-year SVG widgets. Runs daily via GitHub Actions, outputting to the `stats` branch.
 
-Single-file Go app (`main.go` only -- no `cmd/`, `internal/`, or multi-package structure). Requires Go 1.26+. Direct dependencies: `sirupsen/logrus` (logging) and `stretchr/testify` (testing).
+Single-file Go app (`main.go` only -- no `cmd/`, `internal/`, or multi-package structure). Requires Go 1.27+. Direct dependencies: `sirupsen/logrus` (logging) and `stretchr/testify` (testing).
 
 ## Build and Test Commands
 
