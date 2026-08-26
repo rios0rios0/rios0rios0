@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed `CONTRIBUTING.md` and the default pull request template, which told contributors to run bare `go test`. Every test file in this repository carries the `unit` build tag, so bare `go test` silently runs nothing; both now point at `make test`, which passes `-tags=unit`.'
-time: '2026-08-25T22:38:47.201610813Z'
