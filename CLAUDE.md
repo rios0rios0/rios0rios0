@@ -98,9 +98,9 @@ Six workflows in `.github/workflows/`. Three handle stats generation:
 
 All stats workflows check out `main`, restore `stats_history.json` from the `stats` branch, run the generator, and force-push an orphan commit to `stats`.
 
-Two handle Claude Code CI (both delegate to reusable workflows in `rios0rios0/.github`):
-- **`claude-code-review.yaml`**: Runs on pull request events for automated code review.
-- **`claude.yaml`**: Runs on issue/comment/review events for interactive Claude Code assistance.
+Two handle Claude Code CI (both delegate to reusable workflows in `rios0rios0/pipelines`):
+- **`claude-review.yaml`**: Runs on pull request events for automated code review.
+- **`claude-mention.yaml`**: Runs on issue/comment/review events for interactive Claude Code assistance.
 
 One handles releases (delegates to a reusable workflow in `rios0rios0/pipelines`):
 - **`release.yaml`**: Triggers on push to `main`.
