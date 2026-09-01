@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'refreshed `CLAUDE.md` and `.github/copilot-instructions.md` to document the renamed Claude CI workflows (`claude-review.yaml`, `claude-mention.yaml`) that now delegate to reusable workflows in `rios0rios0/pipelines` instead of `rios0rios0/.github`'
-time: '2026-09-01T16:54:43.936134624Z'

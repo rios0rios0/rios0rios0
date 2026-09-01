@@ -22,6 +22,12 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-09-01
+
+### Changed
+
+- refreshed `CLAUDE.md` and `.github/copilot-instructions.md` to document the renamed Claude CI workflows (`claude-review.yaml`, `claude-mention.yaml`) that now delegate to reusable workflows in `rios0rios0/pipelines` instead of `rios0rios0/.github`
+
 ## [0.3.1] - 2026-08-28
 
 ### Changed
