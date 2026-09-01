@@ -1,0 +1,13 @@
+name: 'checks'
+
+on:
+  pull_request:
+    branches:
+      - 'main'
+
+permissions:
+  contents: 'read'
+
+jobs:
+  checks:
+    uses: 'rios0rios0/pipelines/.github/workflows/checks.yaml@main'
