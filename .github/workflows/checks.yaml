@@ -5,9 +5,12 @@ on:
     branches:
       - 'main'
 
-permissions:
-  contents: 'read'
-
 jobs:
   checks:
     uses: 'rios0rios0/pipelines/.github/workflows/checks.yaml@main'
+    # Declared per JOB rather than at workflow level, matching the rationale
+    # `rios0rios0/pipelines/.github/workflows/release.yaml` spells out: a
+    # workflow-level grant hands the token to every job in the file, including
+    # any future one that only needs to read.
+    permissions:
+      contents: 'read'
