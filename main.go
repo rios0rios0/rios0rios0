@@ -1623,6 +1623,7 @@ func (g heatmapGrid) renderLabels() string {
 // cellFor for the fill color and tooltip of each date (formatted YYYY-MM-DD).
 func (g heatmapGrid) renderCells(cellFor func(dateStr string) (color, tooltip string)) string {
 	var cells string
+	escaper := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
 	for w := 0; w < g.weeks; w++ {
 		for d := 0; d < 7; d++ {
 			date := g.startDate.AddDate(0, 0, w*7+d)
@@ -1631,7 +1632,7 @@ func (g heatmapGrid) renderCells(cellFor func(dateStr string) (color, tooltip st
 			}
 			color, tooltip := cellFor(date.Format("2006-01-02"))
 			cells += fmt.Sprintf(`<rect x="%d" y="%d" width="%d" height="%d" rx="2" fill="%s"><title>%s</title></rect>`,
-				g.cellX(w), g.cellY(d), heatmapCellSize, heatmapCellSize, color, tooltip)
+				g.cellX(w), g.cellY(d), heatmapCellSize, heatmapCellSize, color, escaper.Replace(tooltip))
 		}
 	}
 	return cells
