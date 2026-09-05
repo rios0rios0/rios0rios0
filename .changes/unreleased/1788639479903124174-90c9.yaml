@@ -1,0 +1,3 @@
+kind: 'Security'
+body: 'pinned `actions/checkout` (v7.0.1) and `actions/setup-go` (v7.0.0) to full commit SHAs in the bootstrap, recalculate and update stats workflows, so the SonarCloud `githubactions:S7637` rule no longer reports mutable third-party tags'
+time: '2026-09-05T20:17:59.903029539Z'

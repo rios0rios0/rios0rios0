@@ -52,7 +52,7 @@ Single-package monolith (`package main` in `main.go`). Key components:
 
 - **History system** (`StatsHistory`, `DailySnapshot`, `PlatformSnapshot`): JSON-based persistence. Each daily run saves a snapshot with per-platform stats. `accumulateByYear()` builds per-year views by scanning all snapshots.
 - **Platform fetchers** (`FetchGitHubStats`, `FetchGitLabStats`, `FetchAzureDevOpsStats`): HTTP clients returning `*PlatformStats`. Run in parallel via goroutines. All fail gracefully (skip platform on error).
-- **SVG renderers**: Pure functions returning SVG strings. `renderCombinedStatsSVG`, `renderTokensHeatmap`, `renderLanguagesBarChart`, `renderContributionHeatmap`.
+- **SVG renderers**: Pure functions returning SVG strings. `renderCombinedStatsSVG`, `renderTokensHeatmap`, `renderLanguagesBarChart`, `renderContributionHeatmap`. Both heatmaps share the `heatmapGrid` helper (calendar-grid geometry, day/month labels, cells and card chrome).
 - **README updater** (`updateReadmeYearSections`): After generating per-year SVGs, auto-inserts new year `<details>` blocks into `README.md` in descending order.
 - **Run modes**: `daily` (today only, reuses languages), `bootstrap` (full current year), `recalculate` (full target year, replaces all snapshots for that year).
 
@@ -73,7 +73,7 @@ Per-year SVGs plus `_final.svg` aliases pointing to the current year:
 | `combined_stats_{year}.svg` | Stats card with stacked bars per metric        |
 | `top_languages_{year}.svg`  | Language bar chart stacked by platform         |
 | `contributions_{year}.svg`  | Contribution heatmap (Jan 1 - Dec 31 or today) |
-| `claude_tokens_final.svg`   | Token usage line graph (not year-scoped)       |
+| `claude_tokens_final.svg`   | Token usage calendar heatmap (not year-scoped) |
 | `stats_history.json`        | Accumulated daily snapshots                    |
 
 ## CI/CD

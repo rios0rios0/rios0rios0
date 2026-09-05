@@ -1536,6 +1536,138 @@ func GenerateCombinedStatsSVG(platformStats []NamedPlatformStats, outputPath str
 	return os.WriteFile(outputPath, []byte(svgContent), 0644)
 }
 
+// Calendar-grid geometry shared by the tokens and contributions heatmaps.
+const (
+	heatmapCellSize     = 13
+	heatmapCellGap      = 3
+	heatmapPadLeft      = 60
+	heatmapPadTop       = 55
+	heatmapPadBottom    = 20
+	heatmapLegendHeight = 20
+	// heatmapMinWeeks standardizes every card to a 53-week (full year) width
+	// so the tokens and contributions heatmaps always have the same size.
+	heatmapMinWeeks = 53
+	// heatmapEmptyColor fills the days without any activity.
+	heatmapEmptyColor = "#161b22"
+)
+
+// heatmapGrid lays out a GitHub-style calendar heatmap: one column per week
+// between startDate and endDate, one row per weekday (Sunday first).
+type heatmapGrid struct {
+	startDate time.Time
+	endDate   time.Time
+	weeks     int
+	width     int
+	height    int
+}
+
+func newHeatmapGrid(startDate, endDate time.Time) heatmapGrid {
+	totalDays := int(endDate.Sub(startDate).Hours()/24) + 1
+	weeks := (totalDays + 6) / 7
+	if weeks < 1 {
+		weeks = 1
+	}
+	displayWeeks := heatmapMinWeeks
+	if weeks > displayWeeks {
+		displayWeeks = weeks
+	}
+	return heatmapGrid{
+		startDate: startDate,
+		endDate:   endDate,
+		weeks:     weeks,
+		width:     heatmapPadLeft + displayWeeks*(heatmapCellSize+heatmapCellGap) + 25,
+		height:    heatmapPadTop + 7*(heatmapCellSize+heatmapCellGap) + heatmapPadBottom + heatmapLegendHeight,
+	}
+}
+
+// cellX returns the left edge of week column w.
+func (g heatmapGrid) cellX(w int) int {
+	return heatmapPadLeft + w*(heatmapCellSize+heatmapCellGap)
+}
+
+// cellY returns the top edge of weekday row d (0 = Sunday).
+func (g heatmapGrid) cellY(d int) int {
+	return heatmapPadTop + d*(heatmapCellSize+heatmapCellGap)
+}
+
+// legendY returns the top edge of the legend row drawn below the grid.
+func (g heatmapGrid) legendY() int {
+	return heatmapPadTop + 7*(heatmapCellSize+heatmapCellGap) + 12
+}
+
+// renderLabels renders the Mon/Wed/Fri row labels and a month label above
+// every week column in which a new month starts.
+func (g heatmapGrid) renderLabels() string {
+	var labels string
+	dayLabels := []string{"", "Mon", "", "Wed", "", "Fri", ""}
+	for i, label := range dayLabels {
+		if label != "" {
+			y := g.cellY(i) + heatmapCellSize - 2
+			labels += fmt.Sprintf(`<text x="25" y="%d" class="day-label">%s</text>`, y, label)
+		}
+	}
+
+	lastMonth := -1
+	monthNames := []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}
+	for w := 0; w < g.weeks; w++ {
+		month := int(g.startDate.AddDate(0, 0, w*7).Month()) - 1
+		if month != lastMonth {
+			labels += fmt.Sprintf(`<text x="%d" y="%d" class="month-label">%s</text>`, g.cellX(w), heatmapPadTop-8, monthNames[month])
+			lastMonth = month
+		}
+	}
+	return labels
+}
+
+// renderCells draws one cell per day from startDate through endDate, asking
+// cellFor for the fill color and tooltip of each date (formatted YYYY-MM-DD).
+func (g heatmapGrid) renderCells(cellFor func(dateStr string) (color, tooltip string)) string {
+	var cells string
+	for w := 0; w < g.weeks; w++ {
+		for d := 0; d < 7; d++ {
+			date := g.startDate.AddDate(0, 0, w*7+d)
+			if date.After(g.endDate) {
+				continue
+			}
+			color, tooltip := cellFor(date.Format("2006-01-02"))
+			cells += fmt.Sprintf(`<rect x="%d" y="%d" width="%d" height="%d" rx="2" fill="%s"><title>%s</title></rect>`,
+				g.cellX(w), g.cellY(d), heatmapCellSize, heatmapCellSize, color, tooltip)
+		}
+	}
+	return cells
+}
+
+// renderSVG wraps the rendered labels, cells and legend in the heatmap card chrome.
+func (g heatmapGrid) renderSVG(title, body string) string {
+	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">
+<style>
+	.title { font: 600 14px 'Segoe UI', Ubuntu, Sans-Serif; fill: #fff; }
+	.day-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
+	.month-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
+	.legend-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
+</style>
+<rect width="%d" height="%d" rx="4.5" fill="#151515" stroke="#e4e2e2" stroke-opacity="0.2"/>
+<text x="25" y="25" class="title">%s</text>
+%s
+</svg>`, g.width, g.height, g.width, g.height, g.width, g.height, title, body)
+}
+
+// intensityColor picks the shade of scale (darkest to brightest) matching how
+// count compares to maxCount, in quartiles.
+func intensityColor(scale [4]string, count, maxCount int) string {
+	ratio := float64(count) / float64(maxCount)
+	switch {
+	case ratio <= 0.25:
+		return scale[0]
+	case ratio <= 0.50:
+		return scale[1]
+	case ratio <= 0.75:
+		return scale[2]
+	default:
+		return scale[3]
+	}
+}
+
 func renderTokensHeatmap(tokens []TokenUsage) (string, error) {
 	if len(tokens) == 0 {
 		return "", fmt.Errorf("no token data")
@@ -1588,88 +1720,22 @@ func renderTokensHeatmap(tokens []TokenUsage) (string, error) {
 	}
 
 	purpleScale := [4]string{"#1a1030", "#3d2070", "#6840a0", "#8884d8"}
-	getColor := func(count int) string {
-		if count == 0 {
-			return "#161b22"
-		}
-		ratio := float64(count) / float64(maxTokens)
-		switch {
-		case ratio <= 0.25:
-			return purpleScale[0]
-		case ratio <= 0.50:
-			return purpleScale[1]
-		case ratio <= 0.75:
-			return purpleScale[2]
-		default:
-			return purpleScale[3]
-		}
-	}
 
-	cellSize := 13
-	cellGap := 3
-	padLeft := 60
-	padTop := 55
-	padBottom := 20
-	legendHeight := 20
-
-	totalDays := int(endDate.Sub(startDate).Hours()/24) + 1
-	weeks := (totalDays + 6) / 7
-	if weeks < 1 {
-		weeks = 1
-	}
-	// Standardize to 53 weeks width (full year) for consistent sizing
-	displayWeeks := 53
-	if weeks > displayWeeks {
-		displayWeeks = weeks
-	}
-	width := padLeft + displayWeeks*(cellSize+cellGap) + 25
-	height := padTop + 7*(cellSize+cellGap) + padBottom + legendHeight
-
-	var cells string
-	dayLabels := []string{"", "Mon", "", "Wed", "", "Fri", ""}
-	for i, label := range dayLabels {
-		if label != "" {
-			y := padTop + i*(cellSize+cellGap) + cellSize - 2
-			cells += fmt.Sprintf(`<text x="25" y="%d" class="day-label">%s</text>`, y, label)
+	grid := newHeatmapGrid(startDate, endDate)
+	cells := grid.renderLabels()
+	cells += grid.renderCells(func(dateStr string) (string, string) {
+		count := tokenMap[dateStr]
+		color := heatmapEmptyColor
+		if count != 0 {
+			color = intensityColor(purpleScale, count, maxTokens)
 		}
-	}
-
-	// Month labels
-	currentDate := startDate
-	lastMonth := -1
-	monthNames := []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}
-	for w := 0; w < weeks; w++ {
-		d := currentDate.AddDate(0, 0, w*7)
-		month := int(d.Month()) - 1
-		if month != lastMonth {
-			x := padLeft + w*(cellSize+cellGap)
-			cells += fmt.Sprintf(`<text x="%d" y="%d" class="month-label">%s</text>`, x, padTop-8, monthNames[month])
-			lastMonth = month
-		}
-	}
-
-	// Cells
-	for w := 0; w < weeks; w++ {
-		for d := 0; d < 7; d++ {
-			date := startDate.AddDate(0, 0, w*7+d)
-			if date.After(endDate) {
-				continue
-			}
-			dateStr := date.Format("2006-01-02")
-			count := tokenMap[dateStr]
-			x := padLeft + w*(cellSize+cellGap)
-			y := padTop + d*(cellSize+cellGap)
-			color := getColor(count)
-			tooltip := fmt.Sprintf("%s: %s tokens", dateStr, formatNumber(count))
-			cells += fmt.Sprintf(`<rect x="%d" y="%d" width="%d" height="%d" rx="2" fill="%s"><title>%s</title></rect>`,
-				x, y, cellSize, cellSize, color, tooltip)
-		}
-	}
+		return color, fmt.Sprintf("%s: %s tokens", dateStr, formatNumber(count))
+	})
 
 	// Intensity legend
-	legendY := padTop + 7*(cellSize+cellGap) + 12
+	legendY := grid.legendY()
 	legendLabels := []string{"Less", "", "", "", "More"}
-	legendColors := []string{"#161b22", purpleScale[0], purpleScale[1], purpleScale[2], purpleScale[3]}
+	legendColors := []string{heatmapEmptyColor, purpleScale[0], purpleScale[1], purpleScale[2], purpleScale[3]}
 	dx := 25
 	for i, color := range legendColors {
 		cells += fmt.Sprintf(`<rect x="%d" y="%d" width="10" height="10" rx="2" fill="%s"/>`, dx, legendY, color)
@@ -1681,19 +1747,7 @@ func renderTokensHeatmap(tokens []TokenUsage) (string, error) {
 		}
 	}
 
-	svg := fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">
-<style>
-	.title { font: 600 14px 'Segoe UI', Ubuntu, Sans-Serif; fill: #fff; }
-	.day-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
-	.month-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
-	.legend-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
-</style>
-<rect width="%d" height="%d" rx="4.5" fill="#151515" stroke="#e4e2e2" stroke-opacity="0.2"/>
-<text x="25" y="25" class="title">Claude Code Tokens (by day)</text>
-%s
-</svg>`, width, height, width, height, width, height, cells)
-
-	return svg, nil
+	return grid.renderSVG("Claude Code Tokens (by day)", cells), nil
 }
 
 func GenerateTokensHeatmap(tokens []TokenUsage, outputPath string) error {
@@ -1838,13 +1892,6 @@ func GenerateLanguagesBarChart(languages map[string]map[PlatformName]int64, outp
 }
 
 func renderContributionHeatmap(contributions map[string]map[PlatformName]int, startDate, endDate time.Time) string {
-	cellSize := 13
-	cellGap := 3
-	padLeft := 60
-	padTop := 55
-	padBottom := 20
-	legendHeight := 20
-
 	// Always rewind to the previous Sunday so the grid rows match
 	// the Mon/Wed/Fri day labels. Pre-January cells render as empty.
 	for startDate.Weekday() != time.Sunday {
@@ -1865,7 +1912,7 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 
 	// Determine platform combo and color for a day
 	activeCombos := make(map[PlatformCombo]bool)
-	getColor := func(platforms map[PlatformName]int) (string, PlatformCombo) {
+	getColor := func(platforms map[PlatformName]int) string {
 		total := 0
 		var combo PlatformCombo
 		for p, c := range platforms {
@@ -1875,94 +1922,38 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 			}
 		}
 		if total == 0 {
-			return "#161b22", 0
+			return heatmapEmptyColor
 		}
 		activeCombos[combo] = true
+		return intensityColor(comboColorScale(combo), total, maxCount)
+	}
 
-		scale := comboColorScale(combo)
-		ratio := float64(total) / float64(maxCount)
-		switch {
-		case ratio <= 0.25:
-			return scale[0], combo
-		case ratio <= 0.50:
-			return scale[1], combo
-		case ratio <= 0.75:
-			return scale[2], combo
-		default:
-			return scale[3], combo
+	grid := newHeatmapGrid(startDate, endDate)
+	cells := grid.renderLabels()
+	cells += grid.renderCells(func(dateStr string) (string, string) {
+		platforms := contributions[dateStr]
+		color := getColor(platforms)
+
+		// Build tooltip with per-platform breakdown
+		total := 0
+		for _, c := range platforms {
+			total += c
 		}
-	}
-
-	totalDays := int(endDate.Sub(startDate).Hours()/24) + 1
-	weeks := (totalDays + 6) / 7
-	if weeks < 1 {
-		weeks = 1
-	}
-	// Standardize to 53 weeks width (full year) for consistent sizing with tokens heatmap
-	displayWeeks := 53
-	if weeks > displayWeeks {
-		displayWeeks = weeks
-	}
-	width := padLeft + displayWeeks*(cellSize+cellGap) + 25
-	height := padTop + 7*(cellSize+cellGap) + padBottom + legendHeight
-
-	var cells string
-	dayLabels := []string{"", "Mon", "", "Wed", "", "Fri", ""}
-	for i, label := range dayLabels {
-		if label != "" {
-			y := padTop + i*(cellSize+cellGap) + cellSize - 2
-			cells += fmt.Sprintf(`<text x="25" y="%d" class="day-label">%s</text>`, y, label)
-		}
-	}
-
-	currentDate := startDate
-	lastMonth := -1
-	monthNames := []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}
-	for w := 0; w < weeks; w++ {
-		d := currentDate.AddDate(0, 0, w*7)
-		month := int(d.Month()) - 1
-		if month != lastMonth {
-			x := padLeft + w*(cellSize+cellGap)
-			cells += fmt.Sprintf(`<text x="%d" y="%d" class="month-label">%s</text>`, x, padTop-8, monthNames[month])
-			lastMonth = month
-		}
-	}
-
-	for w := 0; w < weeks; w++ {
-		for d := 0; d < 7; d++ {
-			date := startDate.AddDate(0, 0, w*7+d)
-			if date.After(endDate) {
-				continue
-			}
-			dateStr := date.Format("2006-01-02")
-			platforms := contributions[dateStr]
-			x := padLeft + w*(cellSize+cellGap)
-			y := padTop + d*(cellSize+cellGap)
-			color, _ := getColor(platforms)
-
-			// Build tooltip with per-platform breakdown
-			total := 0
-			for _, c := range platforms {
-				total += c
-			}
-			tooltip := fmt.Sprintf("%s: %d contributions", dateStr, total)
-			if total > 0 {
-				var parts []string
-				for _, p := range platformOrder {
-					if platforms[p] > 0 {
-						parts = append(parts, fmt.Sprintf("%s: %d", string(p), platforms[p]))
-					}
+		tooltip := fmt.Sprintf("%s: %d contributions", dateStr, total)
+		if total > 0 {
+			var parts []string
+			for _, p := range platformOrder {
+				if platforms[p] > 0 {
+					parts = append(parts, fmt.Sprintf("%s: %d", string(p), platforms[p]))
 				}
-				tooltip = fmt.Sprintf("%s: %d (%s)", dateStr, total, strings.Join(parts, ", "))
 			}
-
-			cells += fmt.Sprintf(`<rect x="%d" y="%d" width="%d" height="%d" rx="2" fill="%s"><title>%s</title></rect>`,
-				x, y, cellSize, cellSize, color, tooltip)
+			tooltip = fmt.Sprintf("%s: %d (%s)", dateStr, total, strings.Join(parts, ", "))
 		}
-	}
+		return color, tooltip
+	})
 
 	// Platform combo legend (show only combos that appear in the data)
-	legendY := padTop + 7*(cellSize+cellGap) + 12
+	legendY := grid.legendY()
 	comboOrder := []PlatformCombo{
 		comboGitHub, comboGitLab, comboAzureDevOps,
 		comboGitHub | comboGitLab, comboGitHub | comboAzureDevOps, comboGitLab | comboAzureDevOps,
@@ -1970,7 +1961,7 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 	}
 	dx := 25
 	row := 0
-	maxDx := width - 25
+	maxDx := grid.width - 25
 	// Always show all 3 single-platform labels, plus any active combo labels
 	for _, combo := range comboOrder {
 		isSinglePlatform := combo == comboGitHub || combo == comboGitLab || combo == comboAzureDevOps
@@ -1990,17 +1981,7 @@ func renderContributionHeatmap(contributions map[string]map[PlatformName]int, st
 		dx += entryWidth
 	}
 
-	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">
-<style>
-	.title { font: 600 14px 'Segoe UI', Ubuntu, Sans-Serif; fill: #fff; }
-	.day-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
-	.month-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
-	.legend-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
-</style>
-<rect width="%d" height="%d" rx="4.5" fill="#151515" stroke="#e4e2e2" stroke-opacity="0.2"/>
-<text x="25" y="25" class="title">Contributions (across all platforms)</text>
-%s
-</svg>`, width, height, width, height, width, height, cells)
+	return grid.renderSVG("Contributions (across all platforms)", cells)
 }
 
 func GenerateContributionHeatmap(contributions map[string]map[PlatformName]int, startDate, endDate time.Time, outputPath string) error {
