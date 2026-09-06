@@ -22,6 +22,18 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-06
+
+### Fixed
+
+- declared `**/*_test.go` and `**/test/**` as test sources in `.sonarcloud.properties`, so duplicated setup in test code is no longer indexed as production code and no longer fails the duplication quality gate under SonarCloud Automatic Analysis
+- extracted the calendar grid, labels, cells and card chrome shared by the tokens and contributions heatmaps into a `heatmapGrid` helper, removing the 86 duplicated lines SonarCloud flagged in `main.go`
+- moved the Sunday rewind into `newHeatmapGrid` so the tokens heatmap no longer skips it for a Jan 1 start; in any year that does not begin on a Sunday the tokens card drew every day up to four rows away from the Mon/Wed/Fri label describing it, while the contributions card built from the same helper was correct
+
+### Security
+
+- pinned `actions/checkout` (v7.0.1) and `actions/setup-go` (v7.0.0) to full commit SHAs in the bootstrap, recalculate and update stats workflows, so the SonarCloud `githubactions:S7637` rule no longer reports mutable third-party tags
+
 ## [0.4.0] - 2026-09-02
 
 ### Added
