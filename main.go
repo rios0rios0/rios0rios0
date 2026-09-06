@@ -1553,6 +1553,10 @@ const (
 
 // heatmapGrid lays out a GitHub-style calendar heatmap: one column per week
 // between startDate and endDate, one row per weekday (Sunday first).
+//
+// newHeatmapGrid enforces the Sunday-first contract by rewinding startDate to
+// the preceding Sunday, so row d always holds weekday d and matches the
+// Mon/Wed/Fri labels drawn by renderLabels. No caller can misalign the rows.
 type heatmapGrid struct {
 	startDate time.Time
 	endDate   time.Time
@@ -1562,6 +1566,13 @@ type heatmapGrid struct {
 }
 
 func newHeatmapGrid(startDate, endDate time.Time) heatmapGrid {
+	// Always rewind to the previous Sunday so the grid rows match the
+	// Mon/Wed/Fri day labels. Days before the requested start (the tail of
+	// December for a Jan 1 range, say) render as empty cells, matching GitHub.
+	for startDate.Weekday() != time.Sunday {
+		startDate = startDate.AddDate(0, 0, -1)
+	}
+
 	totalDays := int(endDate.Sub(startDate).Hours()/24) + 1
 	weeks := (totalDays + 6) / 7
 	if weeks < 1 {
@@ -1701,15 +1712,6 @@ func renderTokensHeatmap(tokens []TokenUsage) (string, error) {
 	endDate := time.Date(minDate.Year(), 12, 31, 23, 59, 59, 0, time.UTC)
 	if maxDate.After(endDate) {
 		endDate = maxDate
-	}
-
-	// For a calendar-year view (Jan 1 start), do not rewind to the previous
-	// Sunday as that would include days from the previous year.
-	isCalendarYear := startDate.Day() == 1 && startDate.Month() == time.January
-	if !isCalendarYear {
-		for startDate.Weekday() != time.Sunday {
-			startDate = startDate.AddDate(0, 0, -1)
-		}
 	}
 
 	// Find max tokens for scaling
@@ -1893,11 +1895,7 @@ func GenerateLanguagesBarChart(languages map[string]map[PlatformName]int64, outp
 }
 
 func renderContributionHeatmap(contributions map[string]map[PlatformName]int, startDate, endDate time.Time) string {
-	// Always rewind to the previous Sunday so the grid rows match
-	// the Mon/Wed/Fri day labels. Pre-January cells render as empty.
-	for startDate.Weekday() != time.Sunday {
-		startDate = startDate.AddDate(0, 0, -1)
-	}
+	// newHeatmapGrid rewinds startDate to the previous Sunday for us.
 
 	// Find max total count across all days
 	maxCount := 1
