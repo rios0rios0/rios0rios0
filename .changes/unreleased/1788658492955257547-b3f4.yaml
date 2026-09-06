@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'moved the Sunday rewind into `newHeatmapGrid` so the tokens heatmap no longer skips it for a Jan 1 start; in any year that does not begin on a Sunday the tokens card drew every day up to four rows away from the Mon/Wed/Fri label describing it, while the contributions card built from the same helper was correct'
+time: '2026-09-06T01:34:52.954951765Z'

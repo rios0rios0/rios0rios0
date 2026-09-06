@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: 'Checkout main'
-        uses: 'actions/checkout@v6'
+        uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # v7.0.1
         with:
           ref: 'main'
           fetch-depth: 0
@@ -30,7 +30,7 @@ jobs:
           git fetch origin stats:stats 2>/dev/null && git checkout stats -- stats_history.json 2>/dev/null || echo "No existing stats branch or history file found, starting fresh"
 
       - name: 'Set Up Go'
-        uses: 'actions/setup-go@v6'
+        uses: 'actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e' # v7.0.0
         with:
           go-version-file: 'go.mod'
           cache-dependency-path: 'go.sum'

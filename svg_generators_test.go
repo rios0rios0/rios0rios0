@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/xml"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -166,6 +167,20 @@ func TestRenderTokensHeatmap(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, result, "Less")
 		assert.Contains(t, result, "More")
+	})
+
+	t.Run("should align the rows with the day labels when the year starts mid-week", func(t *testing.T) {
+		// given
+		// 2026-01-01 is a Thursday, so the calendar-year range starts mid-week.
+		tokens := []TokenUsage{{Date: "2026-01-01", Tokens: 1000}}
+
+		// when
+		result, err := renderTokensHeatmap(tokens)
+
+		// then
+		require.NoError(t, err)
+		// Thursday is row 4: y = padTop + 4*(cellSize+cellGap) = 55 + 64 = 119.
+		assert.Contains(t, result, `<rect x="60" y="119" width="13" height="13" rx="2" fill="#8884d8"><title>2026-01-01: 1.0K tokens</title></rect>`)
 	})
 }
 
@@ -338,6 +353,171 @@ func TestRenderContributionHeatmap(t *testing.T) {
 		assert.Contains(t, result, "Mon")
 		assert.Contains(t, result, "Wed")
 		assert.Contains(t, result, "Fri")
+	})
+}
+
+func TestHeatmapGrid(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should standardize the width to 53 weeks when the range is shorter than a year", func(t *testing.T) {
+		// given
+		startDate := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		endDate := time.Date(2026, 3, 27, 12, 0, 0, 0, time.UTC)
+
+		// when
+		grid := newHeatmapGrid(startDate, endDate)
+
+		// then
+		assert.Equal(t, 13, grid.weeks)
+		assert.Equal(t, 933, grid.width)
+		assert.Equal(t, 207, grid.height)
+	})
+
+	t.Run("should widen past 53 weeks when the range spans more than a year", func(t *testing.T) {
+		// given
+		startDate := time.Date(2025, 1, 5, 0, 0, 0, 0, time.UTC)
+		endDate := time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC)
+
+		// when
+		grid := newHeatmapGrid(startDate, endDate)
+
+		// then
+		assert.Equal(t, 56, grid.weeks)
+		assert.Equal(t, 981, grid.width)
+	})
+
+	t.Run("should keep at least one week when the end date precedes the start date", func(t *testing.T) {
+		// given
+		startDate := time.Date(2026, 5, 10, 0, 0, 0, 0, time.UTC)
+		endDate := startDate.AddDate(0, 0, -30)
+
+		// when
+		grid := newHeatmapGrid(startDate, endDate)
+
+		// then
+		assert.Equal(t, 1, grid.weeks)
+	})
+
+	t.Run("should label the weekday rows and every month start", func(t *testing.T) {
+		// given
+		// 2026-01-01 is a Thursday, so the grid rewinds into the 2025-12-28 week
+		// and the first column is labelled Dec.
+		grid := newHeatmapGrid(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 3, 31, 0, 0, 0, 0, time.UTC))
+
+		// when
+		labels := grid.renderLabels()
+
+		// then
+		assert.Contains(t, labels, `class="day-label">Mon</text>`)
+		assert.Contains(t, labels, `class="day-label">Wed</text>`)
+		assert.Contains(t, labels, `class="day-label">Fri</text>`)
+		assert.Equal(t, 3, strings.Count(labels, "day-label"))
+		assert.Contains(t, labels, `class="month-label">Dec</text>`)
+		assert.Contains(t, labels, `class="month-label">Jan</text>`)
+		assert.Contains(t, labels, `class="month-label">Feb</text>`)
+		assert.Contains(t, labels, `class="month-label">Mar</text>`)
+		assert.Equal(t, 4, strings.Count(labels, "month-label"))
+	})
+
+	t.Run("should rewind the start date to Sunday when the range starts mid-week", func(t *testing.T) {
+		// given
+		// 2026-01-01 is a Thursday: without the rewind every cell would sit four
+		// rows away from the weekday label describing it.
+		startDate := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+		// when
+		grid := newHeatmapGrid(startDate, time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC))
+
+		// then
+		assert.Equal(t, time.Sunday, grid.startDate.Weekday())
+		assert.Equal(t, time.Date(2025, 12, 28, 0, 0, 0, 0, time.UTC), grid.startDate)
+	})
+
+	t.Run("should keep the start date when the range already starts on Sunday", func(t *testing.T) {
+		// given
+		startDate := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+
+		// when
+		grid := newHeatmapGrid(startDate, time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC))
+
+		// then
+		assert.Equal(t, startDate, grid.startDate)
+	})
+
+	t.Run("should draw every date on the row matching its weekday", func(t *testing.T) {
+		// given
+		grid := newHeatmapGrid(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC))
+		// renderLabels draws Mon/Wed/Fri on rows 1/3/5, so those weekdays must
+		// land on exactly those rows.
+		rowFor := map[string]int{
+			"2026-01-01": 4, // Thursday
+			"2026-01-02": 5, // Friday
+			"2026-01-05": 1, // Monday
+			"2026-01-07": 3, // Wednesday
+		}
+
+		// when
+		cells := grid.renderCells(func(dateStr string) (string, string) {
+			return "#123456", dateStr
+		})
+
+		// then
+		for date, row := range rowFor {
+			assert.Contains(t, cells, fmt.Sprintf(`y="%d" width="13" height="13" rx="2" fill="#123456"><title>%s</title>`, grid.cellY(row), date), date)
+		}
+	})
+
+	t.Run("should draw one cell per day and skip dates after the end date", func(t *testing.T) {
+		// given
+		grid := newHeatmapGrid(time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC))
+		var seen []string
+
+		// when
+		cells := grid.renderCells(func(dateStr string) (string, string) {
+			seen = append(seen, dateStr)
+			return "#123456", dateStr + " tip"
+		})
+
+		// then
+		assert.Len(t, seen, 10)
+		assert.Equal(t, "2026-03-01", seen[0])
+		assert.Equal(t, "2026-03-10", seen[9])
+		assert.Equal(t, 10, strings.Count(cells, "<rect"))
+		assert.Contains(t, cells, `<rect x="60" y="55" width="13" height="13" rx="2" fill="#123456"><title>2026-03-01 tip</title></rect>`)
+		assert.Contains(t, cells, `<rect x="76" y="87" width="13" height="13" rx="2" fill="#123456"><title>2026-03-10 tip</title></rect>`)
+	})
+
+	t.Run("should wrap the body in the card chrome with the given title", func(t *testing.T) {
+		// given
+		grid := newHeatmapGrid(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC))
+
+		// when
+		svg := grid.renderSVG("My Title", `<text>body</text>`)
+
+		// then
+		assertValidSVGXML(t, svg)
+		assert.Contains(t, svg, `width="933" height="207" viewBox="0 0 933 207"`)
+		assert.Contains(t, svg, `class="title">My Title</text>`)
+		assert.Contains(t, svg, `<text>body</text>`)
+	})
+}
+
+func TestIntensityColor(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should map each quartile to the matching shade", func(t *testing.T) {
+		// given
+		scale := [4]string{"q1", "q2", "q3", "q4"}
+		expected := map[int]string{1: "q1", 25: "q1", 26: "q2", 50: "q2", 51: "q3", 75: "q3", 76: "q4", 100: "q4"}
+
+		// when
+		actual := make(map[int]string, len(expected))
+		for count := range expected {
+			actual[count] = intensityColor(scale, count, 100)
+		}
+
+		// then
+		assert.Equal(t, expected, actual)
 	})
 }
 

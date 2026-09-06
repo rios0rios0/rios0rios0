@@ -59,9 +59,10 @@ Single-package monolith (`package main` in `main.go`). Key components:
 - **Platform fetchers** (`FetchGitHubStats`, `FetchGitLabStats`, `FetchAzureDevOpsStats`): HTTP clients returning `*PlatformStats`. Run in parallel via goroutines. GitHub uses GraphQL for contributions. Language data is filtered to repos with activity in the last year (GitHub: `pushed_at`, GitLab: `last_activity_at`, Azure DevOps: file extension analysis from repo trees). All fail gracefully (skip platform on error).
 - **SVG renderers**: Pure functions returning SVG strings. Each has a `Generate*` wrapper for disk I/O.
   - `renderCombinedStatsSVG([]NamedPlatformStats)` -- stats card with stacked bars
-  - `renderTokensHeatmap([]TokenUsage)` -- token usage line graph (named "heatmap" historically)
+  - `renderTokensHeatmap([]TokenUsage)` -- token usage calendar heatmap (purple intensity scale)
   - `renderLanguagesBarChart(map[string]map[PlatformName]int64)` -- stacked bar chart
   - `renderContributionHeatmap(contribs, startDate, endDate)` -- heatmap with full year range
+  - `heatmapGrid` (`newHeatmapGrid`, `renderLabels`, `renderCells`, `renderSVG`) -- calendar-grid geometry, day/month labels, cells and card chrome shared by both heatmaps; `intensityColor` picks one of a scale's four shades for a count
 - **Run modes**: `daily` (today only, reuses languages), `bootstrap` (full current year), `recalculate` (full target year, replaces all snapshots for that year via `removeSnapshotsForYear`, regenerates SVGs for all years)
 - **README updater** (`updateReadmeYearSections`): After generating per-year SVGs, auto-inserts new year `<details>` blocks into `README.md` in descending order. Skips the current year (handled by `_final.svg`).
 - **`main()` flow**: Load history -> fetch platforms (parallel) -> save snapshot -> accumulate by year -> generate per-year SVGs (full year range) -> copy current year to `_final.svg` -> update README year sections -> generate tokens graph
@@ -86,7 +87,7 @@ Per-year SVGs (e.g., `combined_stats_2026.svg`) plus `_final.svg` aliases pointi
 | `combined_stats_{year}.svg` | Stats card with stacked bars per metric        |
 | `top_languages_{year}.svg`  | Language bar chart stacked by platform         |
 | `contributions_{year}.svg`  | Contribution heatmap (Jan 1 - Dec 31 or today) |
-| `claude_tokens_final.svg`   | Token usage line graph (not year-scoped)       |
+| `claude_tokens_final.svg`   | Token usage calendar heatmap (not year-scoped) |
 | `stats_history.json`        | Accumulated daily snapshots                    |
 
 ## CI/CD

@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'extracted the calendar grid, labels, cells and card chrome shared by the tokens and contributions heatmaps into a `heatmapGrid` helper, removing the 86 duplicated lines SonarCloud flagged in `main.go`'
+time: '2026-09-05T20:17:59.913105633Z'
