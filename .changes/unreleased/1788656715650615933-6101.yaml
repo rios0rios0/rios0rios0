@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'declared `**/*_test.go` and `**/test/**` as test sources in `.sonarcloud.properties`, so duplicated setup in test code is no longer indexed as production code and no longer fails the duplication quality gate under SonarCloud Automatic Analysis'
-time: '2026-09-06T01:05:15.650446975Z'
