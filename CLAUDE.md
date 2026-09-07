@@ -92,7 +92,7 @@ Per-year SVGs (e.g., `combined_stats_2026.svg`) plus `_final.svg` aliases pointi
 
 ## CI/CD
 
-Six workflows in `.github/workflows/`. Three handle stats generation:
+Seven workflows in `.github/workflows/`. Three handle stats generation:
 - **`update-stats.yml`**: Runs daily at midnight UTC via `schedule` and can be triggered manually via `workflow_dispatch`. `RUN_MODE=daily`.
 - **`bootstrap-stats.yml`**: Manual dispatch only. `RUN_MODE=bootstrap`. Full current-year fetch with languages.
 - **`recalculate-stats.yml`**: Manual dispatch only with `year` input. `RUN_MODE=recalculate`. Re-fetches all data for the given year, replaces that year's snapshots, and regenerates SVGs for all years.
@@ -105,6 +105,9 @@ Two handle Claude Code CI (both delegate to reusable workflows in `rios0rios0/pi
 
 One handles releases (delegates to a reusable workflow in `rios0rios0/pipelines`):
 - **`release.yaml`**: Triggers on push to `main`.
+
+One enforces the pull-request quality gate (delegates to a reusable workflow in `rios0rios0/pipelines`):
+- **`checks.yaml`**: Runs on pull requests to `main`, invoking the shared `checks` gate (rebase status and the changelog fragment rule). This is what makes a missing chlog fragment fail CI here.
 
 ## Stale Documentation
 
