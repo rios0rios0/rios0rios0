@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'refreshed `CLAUDE.md` and `.github/copilot-instructions.md` to document the new `checks.yaml` pull-request quality-gate workflow, and corrected the secret-hygiene bullet in `.github/skills/code-review/SKILL.md` to quote non-matchable credential prefixes'
+time: '2026-09-07T08:30:00.300343518Z'

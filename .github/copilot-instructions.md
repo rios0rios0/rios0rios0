@@ -78,7 +78,7 @@ Per-year SVGs plus `_final.svg` aliases pointing to the current year:
 
 ## CI/CD
 
-Six workflows in `.github/workflows/`. Three handle stats generation:
+Seven workflows in `.github/workflows/`. Three handle stats generation:
 - **`update-stats.yml`**: Runs daily at midnight UTC. `RUN_MODE=daily`.
 - **`bootstrap-stats.yml`**: Manual dispatch only. `RUN_MODE=bootstrap`.
 - **`recalculate-stats.yml`**: Manual dispatch with `year` input. `RUN_MODE=recalculate`.
@@ -91,6 +91,9 @@ Two handle Claude Code CI (delegate to reusable workflows in `rios0rios0/pipelin
 
 One handles releases (delegates to a reusable workflow in `rios0rios0/pipelines`):
 - **`release.yaml`**: Triggers on push to `main`.
+
+One enforces the PR quality gate (delegates to a reusable workflow in `rios0rios0/pipelines`):
+- **`checks.yaml`**: Runs on pull requests to `main`, invoking the shared `checks` gate (rebase status and the changelog fragment rule) — a missing chlog fragment fails CI.
 
 ## Repository Structure
 
@@ -113,6 +116,7 @@ One handles releases (delegates to a reusable workflow in `rios0rios0/pipelines`
         ├── update-stats.yml          # Daily stats workflow
         ├── bootstrap-stats.yml       # Bootstrap workflow
         ├── recalculate-stats.yml     # Recalculate workflow
+        ├── checks.yaml               # PR quality gate (rebase + changelog fragment)
         ├── claude-review.yaml        # Automated PR review via Claude Code
         ├── claude-mention.yaml       # Interactive Claude Code on issues/comments
         └── release.yaml              # Release workflow on push to main

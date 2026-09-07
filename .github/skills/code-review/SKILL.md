@@ -205,7 +205,7 @@ See [Security](https://github.com/rios0rios0/guide/wiki/Security).
   environment variables or a secret manager — never in source, tests, fixtures, or the
   changelog. A secret that reaches a commit must be rotated, not merely deleted.
 - **Never write a PEM header sentinel or a realistic key shape into a fixture**
-  (`ghp_…`, `sk-…`, `AKIA…`, `xoxb-…`, JWT-shaped strings, or the dashed `BEGIN …` banners).
+  (GitHub `ghp_` prefixes, OpenAI `sk-` prefixes, AWS `AKIA` prefixes, Slack `xoxb` prefixes, JWT-shaped strings, or the dashed `BEGIN …` banners).
   Gitleaks matches the shape, not the value, so a placeholder that merely *looks* like a
   credential fails the pipeline. Use inert placeholders such as `fixture-token-placeholder`.
 - **Suppressions must be justified.** Entries in `.gitleaksignore`, `.trivyignore`,
