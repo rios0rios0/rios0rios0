@@ -168,7 +168,7 @@ See [Documentation & Change Control](https://github.com/rios0rios0/guide/wiki/Do
 This repository uses **chlog fragments**. `CHANGELOG.md` is generated and is never edited by
 hand.
 
-- Every change ships a fragment created with `chlog new --kind <Kind> --body "…"`, staged in
+- Every change ships a fragment created with `chlog new --kind <Kind> --body '…'`, staged in
   the **same commit** as the code. Kinds: `Added`, `Changed`, `Deprecated`, `Removed`,
   `Fixed`, `Security`.
 - A backward-incompatible change to the public interface additionally carries `--breaking`.
@@ -205,9 +205,10 @@ See [Security](https://github.com/rios0rios0/guide/wiki/Security).
   environment variables or a secret manager — never in source, tests, fixtures, or the
   changelog. A secret that reaches a commit must be rotated, not merely deleted.
 - **Never write a PEM header sentinel or a realistic key shape into a fixture**
-  (GitHub `ghp_` prefixes, OpenAI `sk-` prefixes, AWS `AKIA` prefixes, Slack `xoxb` prefixes, JWT-shaped strings, or the dashed `BEGIN …` banners).
-  Gitleaks matches the shape, not the value, so a placeholder that merely *looks* like a
-  credential fails the pipeline. Use inert placeholders such as `fixture-token-placeholder`.
+  (GitHub `ghp_` prefixes, OpenAI `sk-` prefixes, AWS `AKIA` prefixes, Slack `xoxb`
+  prefixes, JWT-shaped strings, or the dashed `BEGIN …` banners). Gitleaks matches
+  the shape, not the value, so a placeholder that merely *looks* like a credential
+  fails the pipeline. Use inert placeholders such as `fixture-token-placeholder`.
 - **Suppressions must be justified.** Entries in `.gitleaksignore`, `.trivyignore`,
   `.semgrepignore`, or `.codeql-false-positives` need a fingerprint, a dated comment, and a
   reason. A suppression added to silence a real finding is a Critical.
