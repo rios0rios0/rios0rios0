@@ -22,6 +22,14 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-09-08
+
+### Changed
+
+- changed both `chlog new` examples in the AI-assistant instruction block of `CLAUDE.md` and `.github/copilot-instructions.md` to `--body '<past-tense description>'`: changelog bodies here are written in simple past tense, and the body is single-quoted because it carries backticks that a double-quoted shell argument would command-substitute, and added the line telling the reader to write an apostrophe inside the single-quoted body as `'\''`, since bodies here carry possessives, and switched the 2 other hand-written `chlog new` examples in `CONTRIBUTING.md` and `.github/skills/code-review/SKILL.md` to the same single-quoted body argument
+- re-wrapped the secret-hygiene bullet of the `code-review` skill to the fleet-standard five-line form the weekly refresh prescribes, without changing a word of it
+- refreshed `CLAUDE.md` and `.github/copilot-instructions.md` to document the new `checks.yaml` pull-request quality-gate workflow, and reworded the secret-hygiene bullet in the `code-review` skill to name the vendor behind each credential prefix and to drop the hyphen from the Slack example, the one shape the shared Gitleaks history scan matches on its own
+
 ## [0.4.1] - 2026-09-07
 
 ### Changed
