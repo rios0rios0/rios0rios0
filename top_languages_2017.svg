@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="495" height="260" viewBox="0 0 495 260" fill="none" role="img">
+<title>Top Languages</title>
+<style>
+	.header { font: 600 14px 'Segoe UI', Ubuntu, Sans-Serif; fill: #fff; }
+	.stat { font: 400 12px 'Segoe UI', Ubuntu, Sans-Serif; fill: #c9d1d9; }
+	.legend-label { font: 400 10px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }
+</style>
+<rect data-testid="card-bg" x="0.5" y="0.5" rx="4.5" height="99%" width="494" fill="#151515" stroke="#e4e2e2" stroke-opacity="0.2"/>
+<g data-testid="card-title" transform="translate(25, 25)">
+	<text x="0" y="0" class="header" data-testid="header">Top Languages (across all platforms)</text>
+</g>
+<text x="247.5" y="130" class="stat" text-anchor="middle">No language data available</text>
+<rect x="25" y="230" width="10" height="10" rx="2" fill="#238636"/><text x="39" y="239" class="legend-label">GitHub</text><rect x="93" y="230" width="10" height="10" rx="2" fill="#e24329"/><text x="107" y="239" class="legend-label">GitLab</text><rect x="161" y="230" width="10" height="10" rx="2" fill="#0078d4"/><text x="175" y="239" class="legend-label">Azure DevOps</text>
+</svg>
