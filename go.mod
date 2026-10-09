@@ -1,6 +1,6 @@
 module github.com/rios0rios0/rios0rios0
 
-go 1.27.1
+go 1.27.2
 
 require (
 	github.com/sirupsen/logrus v1.10.2
