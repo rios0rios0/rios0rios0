@@ -24,13 +24,16 @@ development practices, refer to the **[Development Guide](https://github.com/rio
    ```
 5. Run the program locally (requires environment variables for at least one platform):
    ```bash
+   # For GitHub stats
+   GITHUB_USERNAME=your_username GH_TOKEN=your_token go run main.go
+
    # For GitLab stats
    GITLAB_USERNAME=your_username GITLAB_ACCESS_TOKEN=your_token go run main.go
 
    # For Azure DevOps stats
    AZURE_DEVOPS_ORG=your_org AZURE_DEVOPS_ACCESS_TOKEN=your_token go run main.go
    ```
-6. Verify the generated SVG output files (`gitlab_stats_final.svg` or `azure_devops_stats_final.svg`)
+6. Verify the generated SVG output files (`combined_stats_final.svg`, `top_languages_final.svg`, `contributions_final.svg`, `claude_tokens_final.svg`, plus the per-year `*_{year}.svg` files)
 7. Run tests:
    ```bash
    make test
@@ -39,5 +42,5 @@ development practices, refer to the **[Development Guide](https://github.com/rio
    ```bash
    chlog new --kind Added --body 'added the thing that was not there before'
    ```
-9. Commit following the [commit conventions](https://github.com/rios0rios0/guide/wiki/Life-Cycle/Git-Flow)
+9. Commit following the [commit conventions](https://github.com/rios0rios0/guide/wiki/Git-Flow)
 10. Open a pull request against `main`

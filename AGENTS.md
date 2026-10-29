@@ -1,0 +1,137 @@
+# AGENTS.md
+
+This file provides guidance to AI coding agents (Claude Code, Codex, Cursor, GitHub Copilot) when working with code in this repository.
+
+## Project Overview
+
+Go application that fetches user statistics from GitHub, GitLab, and Azure DevOps APIs and generates SVG visualizations for a GitHub profile README. Persists daily snapshots to `stats_history.json` for historical accumulation, then generates per-year SVG widgets. Runs daily via GitHub Actions, outputting to the `stats` branch.
+
+Single-file Go app (`main.go` only -- no `cmd/`, `internal/`, or multi-package structure). Requires Go 1.27+. Direct dependencies: `sirupsen/logrus` (logging) and `stretchr/testify` (testing).
+
+## Build and Test Commands
+
+```bash
+# Run all unit tests (build tag required)
+make test
+
+# Run a single test by name
+go test -tags=unit -v -count=1 -run TestFunctionName ./...
+
+# Generate SVGs locally (requires platform credentials as env vars)
+make generate
+
+# Build binary
+go build -o stats-generator main.go
+
+# Format and vet
+go fmt ./... && go vet ./...
+```
+
+The Makefile only has `test` and `generate` targets. There are no `lint` or `sast` targets in this project.
+
+## Environment Variables
+
+Platform credentials (at least one required):
+
+| Variable                                        | Platform     |
+|-------------------------------------------------|--------------|
+| `GITHUB_USERNAME`, `GH_TOKEN`                   | GitHub       |
+| `GITLAB_USERNAME`, `GITLAB_ACCESS_TOKEN`        | GitLab       |
+| `AZURE_DEVOPS_ORG`, `AZURE_DEVOPS_ACCESS_TOKEN` | Azure DevOps |
+
+Path configuration (defaults work for local development):
+
+| Variable             | Default              | Purpose                                                    |
+|----------------------|----------------------|------------------------------------------------------------|
+| `RUN_MODE`           | `daily`              | Operating mode: `daily`, `bootstrap`, or `recalculate`     |
+| `TARGET_YEAR`        | (none)               | Year to recalculate (required when `RUN_MODE=recalculate`) |
+| `LOG_LEVEL`          | `info`               | Log verbosity: `info` or `debug`                           |
+| `STATS_HISTORY_PATH` | `stats_history.json` | Path to read/write historical snapshots                    |
+| `SVG_OUTPUT_DIR`     | `.`                  | Directory for generated SVG files                          |
+| `README_PATH`        | `README.md`          | Path to README for auto-inserting new year sections        |
+
+## Architecture
+
+Single-package monolith (`package main` in `main.go`). Key components:
+
+- **History system** (`StatsHistory`, `DailySnapshot`, `PlatformSnapshot`): JSON-based persistence. Each daily run saves a snapshot with per-platform stats. `accumulateByYear()` builds per-year views by scanning all snapshots, merging languages (max bytes per language across snapshots) and collecting contributions by year (max per date).
+- **Platform types** (`PlatformName`, `NamedPlatformStats`): Typed platform identity with color/color-scale methods. Order: GitHub, GitLab, Azure DevOps.
+- **Platform fetchers** (`FetchGitHubStats`, `FetchGitLabStats`, `FetchAzureDevOpsStats`): HTTP clients returning `*PlatformStats`. Run in parallel via goroutines. GitHub uses GraphQL for contributions. Language data is filtered to repos with activity in the last year (GitHub: `pushed_at`, GitLab: `last_activity_at`, Azure DevOps: file extension analysis from repo trees). All fail gracefully (skip platform on error).
+- **SVG renderers**: Pure functions returning SVG strings. Each has a `Generate*` wrapper for disk I/O.
+  - `renderCombinedStatsSVG([]NamedPlatformStats)` -- stats card with stacked bars
+  - `renderTokensHeatmap([]TokenUsage)` -- token usage calendar heatmap (purple intensity scale)
+  - `renderLanguagesBarChart(map[string]map[PlatformName]int64)` -- stacked bar chart
+  - `renderContributionHeatmap(contribs, startDate, endDate)` -- heatmap with full year range
+  - `heatmapGrid` (`newHeatmapGrid`, `renderLabels`, `renderCells`, `renderSVG`) -- calendar-grid geometry, day/month labels, cells and card chrome shared by both heatmaps; `intensityColor` picks one of a scale's four shades for a count
+- **Run modes**: `daily` (today only, reuses languages), `bootstrap` (full current year), `recalculate` (full target year, replaces all snapshots for that year via `removeSnapshotsForYear`, regenerates SVGs for all years)
+- **README updater** (`updateReadmeYearSections`): After generating per-year SVGs, auto-inserts new year `<details>` blocks into `README.md` in descending order. Skips the current year (handled by `_final.svg`).
+- **`main()` flow**: Load history -> fetch platforms (parallel) -> save snapshot -> accumulate by year -> generate per-year SVGs (full year range) -> copy current year to `_final.svg` -> update README year sections -> generate tokens graph
+
+Platform colors: GitHub `#238636`, GitLab `#e24329`, Azure DevOps `#0078d4`. Unified card chrome: `rx="4.5"`, `fill="#151515"`, `stroke="#e4e2e2"`, `stroke-opacity="0.2"`.
+
+## Testing
+
+- Build tag `//go:build unit` on all test files; tests won't run without `-tags=unit`
+- Uses `stretchr/testify` for assertions (`assert`, `require`)
+- Tests are parallel (`t.Parallel()` + `t.Run()`)
+- BDD structure with `// given`, `// when`, `// then` comments
+- SVG output validated as well-formed XML via `assertValidSVGXML` helper
+- Three test files by concern: `fetchers_test.go` (platform fetchers), `helpers_test.go` (helpers, history persistence, year accumulation, README updater, `Generate*` wrappers), and `svg_generators_test.go` (renderers, `heatmapGrid`, color scales)
+- Fetchers are tested through a hand-rolled `roundTripFunc` transport (`mockClient`) injected as the `*http.Client`; no mock library
+
+## Generated Output Files
+
+Per-year SVGs (e.g., `combined_stats_2026.svg`) plus `_final.svg` aliases pointing to the current year:
+
+| Pattern                     | Content                                        |
+|-----------------------------|------------------------------------------------|
+| `combined_stats_{year}.svg` | Stats card with stacked bars per metric        |
+| `top_languages_{year}.svg`  | Language bar chart stacked by platform         |
+| `contributions_{year}.svg`  | Contribution heatmap (Jan 1 - Dec 31 or today) |
+| `claude_tokens_final.svg`   | Token usage calendar heatmap (not year-scoped) |
+| `stats_history.json`        | Accumulated daily snapshots                    |
+
+## CI/CD
+
+Seven workflows in `.github/workflows/`. Three handle stats generation:
+- **`update-stats.yml`**: Runs daily at midnight UTC via `schedule` and can be triggered manually via `workflow_dispatch`. `RUN_MODE=daily`.
+- **`bootstrap-stats.yml`**: Manual dispatch only. `RUN_MODE=bootstrap`. Full current-year fetch with languages.
+- **`recalculate-stats.yml`**: Manual dispatch only with `year` input. `RUN_MODE=recalculate`. Re-fetches all data for the given year, replaces that year's snapshots, and regenerates SVGs for all years.
+
+All stats workflows check out `main`, restore `stats_history.json` from the `stats` branch, run the generator, and force-push an orphan commit (history and SVGs only) to `stats`. README edits from `updateReadmeYearSections` reach `main` only through `recalculate-stats.yml`, which opens a `chore/add-<year>-readme-section` pull request; the other stats workflows discard them.
+
+Two handle Claude Code CI (both delegate to reusable workflows in `rios0rios0/pipelines`):
+- **`claude-review.yaml`**: Runs on pull request events for automated code review.
+- **`claude-mention.yaml`**: Runs on issue/comment/review events for interactive Claude Code assistance.
+
+One handles releases (delegates to a reusable workflow in `rios0rios0/pipelines`):
+- **`release.yaml`**: Triggers on push to `main`.
+
+One enforces the pull-request quality gate (delegates to a reusable workflow in `rios0rios0/pipelines`):
+- **`checks.yaml`**: Runs on pull requests to `main`, invoking the shared `checks` gate (rebase status and the changelog fragment rule). This is what makes a missing chlog fragment fail CI here.
+
+<!-- chlog:start -->
+## Changelog (chlog) — MANDATORY
+
+If the repository you are working in uses chlog (a `.chlog.yaml` or `.chlog.yml`
+config file, or a `.changes/` directory, exists at the project root), the
+following is binding and ALWAYS applies: whenever you make ANY change, you MUST
+create a changelog fragment as part of the same change — automatically, without
+being asked, before committing.
+
+- Do NOT edit CHANGELOG.md directly; it is generated from fragments.
+- Create the fragment with:
+  `chlog new --kind <Kind> --body '<past-tense description>'`
+- Write an apostrophe inside the single-quoted body as `'\''`.
+- Valid kinds: Added, Changed, Deprecated, Removed, Fixed, Security
+- Choose the kind that best matches the change (e.g., new feature → Added,
+  bug fix → Fixed, behavior change → Changed, removal → Removed, security fix → Security).
+- If the change is backward-INCOMPATIBLE with the public API (a breaking
+  change), you MUST add the `--breaking` flag:
+  `chlog new --kind <Kind> --breaking --body '<past-tense description>'`.
+  This is the ONLY thing that triggers a major version bump — the kind alone
+  never does (per SemVer, major = incompatible change). When unsure whether a
+  change breaks compatibility, ask the user instead of guessing.
+- Fragments are YAML files in `.changes/unreleased/`; stage them with your commit.
+- `chlog check` fails the build when a fragment is missing — never skip it.
+<!-- chlog:end -->

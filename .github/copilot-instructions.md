@@ -83,7 +83,7 @@ Seven workflows in `.github/workflows/`. Three handle stats generation:
 - **`bootstrap-stats.yml`**: Manual dispatch only. `RUN_MODE=bootstrap`.
 - **`recalculate-stats.yml`**: Manual dispatch with `year` input. `RUN_MODE=recalculate`.
 
-All stats workflows check out `main`, restore `stats_history.json` from the `stats` branch, run the generator, and force-push an orphan commit to `stats`.
+All stats workflows check out `main`, restore `stats_history.json` from the `stats` branch, run the generator, and force-push an orphan commit (history and SVGs only) to `stats`. README year sections reach `main` only through the pull request that `recalculate-stats.yml` opens; the daily and bootstrap runs discard README edits.
 
 Two handle Claude Code CI (delegate to reusable workflows in `rios0rios0/pipelines`):
 - **`claude-review.yaml`**: Runs on pull request events for automated code review.
@@ -105,13 +105,16 @@ One enforces the PR quality gate (delegates to a reusable workflow in `rios0rios
 ├── go.mod / go.sum                   # Go module definition
 ├── Makefile                          # Build targets (test, generate)
 ├── README.md                         # Profile README with per-year stats
-├── CLAUDE.md                         # AI assistant instructions (source of truth)
-├── CHANGELOG.md                      # Project changelog
+├── AGENTS.md                         # AI agent instructions (source of truth)
+├── CLAUDE.md                         # Imports AGENTS.md for Claude Code
+├── CHANGELOG.md                      # Generated from .changes/ fragments
 ├── CONTRIBUTING.md                   # Contribution guidelines
+├── .changes/unreleased/              # chlog fragments
 ├── stats_history.json                # Daily snapshots (on stats branch)
-├── claude_tokens.json                # Token usage data (on stats branch)
+├── claude_tokens.json                # Token usage input, read from the working directory (not committed)
 └── .github/
     ├── copilot-instructions.md       # This file
+    ├── skills/code-review/SKILL.md   # Copilot code-review skill
     └── workflows/
         ├── update-stats.yml          # Daily stats workflow
         ├── bootstrap-stats.yml       # Bootstrap workflow
