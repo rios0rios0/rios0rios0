@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'moved the agent instructions from `CLAUDE.md` to `AGENTS.md`, keeping a `CLAUDE.md` that imports it, and refreshed `AGENTS.md`, `.github/copilot-instructions.md`, the code-review skill and `CONTRIBUTING.md` to point at `AGENTS.md`, list the current SVG outputs and note that README year sections reach `main` only through the recalculate workflow''s pull request'
+time: '2026-10-29T00:22:55.899460257Z'

@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents (Claude Code, Codex, Cursor, GitHub Copilot) when working with code in this repository.
 
 ## Project Overview
 
@@ -76,7 +76,8 @@ Platform colors: GitHub `#238636`, GitLab `#e24329`, Azure DevOps `#0078d4`. Uni
 - Tests are parallel (`t.Parallel()` + `t.Run()`)
 - BDD structure with `// given`, `// when`, `// then` comments
 - SVG output validated as well-formed XML via `assertValidSVGXML` helper
-- Three test files: `fetchers_test.go` (platform fetcher HTTP mocking), `helpers_test.go` (formatNumber, aggregation, history persistence, year accumulation), and `svg_generators_test.go` (all four SVG renderers, combo color scales)
+- Three test files by concern: `fetchers_test.go` (platform fetchers), `helpers_test.go` (helpers, history persistence, year accumulation, README updater, `Generate*` wrappers), and `svg_generators_test.go` (renderers, `heatmapGrid`, color scales)
+- Fetchers are tested through a hand-rolled `roundTripFunc` transport (`mockClient`) injected as the `*http.Client`; no mock library
 
 ## Generated Output Files
 
@@ -97,7 +98,7 @@ Seven workflows in `.github/workflows/`. Three handle stats generation:
 - **`bootstrap-stats.yml`**: Manual dispatch only. `RUN_MODE=bootstrap`. Full current-year fetch with languages.
 - **`recalculate-stats.yml`**: Manual dispatch only with `year` input. `RUN_MODE=recalculate`. Re-fetches all data for the given year, replaces that year's snapshots, and regenerates SVGs for all years.
 
-All stats workflows check out `main`, restore `stats_history.json` from the `stats` branch, run the generator, and force-push an orphan commit to `stats`.
+All stats workflows check out `main`, restore `stats_history.json` from the `stats` branch, run the generator, and force-push an orphan commit (history and SVGs only) to `stats`. README edits from `updateReadmeYearSections` reach `main` only through `recalculate-stats.yml`, which opens a `chore/add-<year>-readme-section` pull request; the other stats workflows discard them.
 
 Two handle Claude Code CI (both delegate to reusable workflows in `rios0rios0/pipelines`):
 - **`claude-review.yaml`**: Runs on pull request events for automated code review.
@@ -108,10 +109,6 @@ One handles releases (delegates to a reusable workflow in `rios0rios0/pipelines`
 
 One enforces the pull-request quality gate (delegates to a reusable workflow in `rios0rios0/pipelines`):
 - **`checks.yaml`**: Runs on pull requests to `main`, invoking the shared `checks` gate (rebase status and the changelog fragment rule). This is what makes a missing chlog fragment fail CI here.
-
-## Stale Documentation
-
-`CONTRIBUTING.md` is outdated -- it references old SVG filenames and omits the `-tags=unit` build tag for tests. Use this CLAUDE.md as the source of truth.
 
 <!-- chlog:start -->
 ## Changelog (chlog) — MANDATORY
