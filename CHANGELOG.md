@@ -22,6 +22,13 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-11-04
+
+### Changed
+
+- changed the Go module `go.yaml.in/yaml/v3` from `v3.0.5` to `v3.0.6`
+- moved the agent instructions from `CLAUDE.md` to `AGENTS.md`, keeping a `CLAUDE.md` that imports it, and refreshed `AGENTS.md`, `.github/copilot-instructions.md`, the code-review skill and `CONTRIBUTING.md` to point at `AGENTS.md`, list the current SVG outputs and note that README year sections reach `main` only through the recalculate workflow's pull request
+
 ## [0.4.5] - 2026-10-21
 
 ### Changed
