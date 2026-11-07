@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="893" height="207" viewBox="0 0 893 207">
+<style>.title { font: 600 14px 'Segoe UI', Ubuntu, Sans-Serif; fill: #fff; } .empty { font: 400 12px 'Segoe UI', Ubuntu, Sans-Serif; fill: #8b949e; }</style>
+<rect width="893" height="207" rx="4.5" fill="#151515" stroke="#e4e2e2" stroke-opacity="0.2"/>
+<text x="25" y="25" class="title">Claude Code Tokens (by day)</text>
+<text x="446" y="120" text-anchor="middle" class="empty">No token data available</text>
+</svg>
