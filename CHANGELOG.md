@@ -22,6 +22,12 @@ Exceptions are acceptable depending on the circumstances (critical bug fixes tha
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-11-11
+
+### Changed
+
+- changed the Go module `golang.org/x/sys` from `v0.49.0` to `v0.50.0`
+
 ## [0.4.6] - 2026-11-04
 
 ### Changed
