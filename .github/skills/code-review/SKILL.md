@@ -83,8 +83,8 @@ them before the generic ones.
 ### Commands a reviewer should be able to quote
 
 ```bash
-make test                                       # go test -tags=unit
-go test -tags=unit -v -count=1 -run TestName ./...
+make test                                       # go test -v -count=1 ./...
+go test -v -count=1 -run TestName ./...
 make generate                                   # needs platform credentials
 go fmt ./... && go vet ./...
 ```
@@ -132,7 +132,7 @@ and YAML blocks inside Markdown.
 
 See [Tests](https://github.com/rios0rios0/guide/wiki/Tests).
 
-- All test files carry `//go:build unit`; the suite does not run without `-tags=unit`.
+- Test files carry no build tag (the team's testing standard bans `//go:build unit`); a plain `go test ./...` runs the whole suite.
 - Three files by concern: `fetchers_test.go`, `helpers_test.go`, `svg_generators_test.go`.
 - `testify` assertions, `t.Parallel()` plus `t.Run()`, BDD comment blocks.
 - A renderer change needs an assertion on the produced SVG string, not a smoke test that it is non-empty.

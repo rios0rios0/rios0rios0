@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'removed the prohibited `unit` build tag from the 3 test files and from `make test`, so a plain `go test ./...`, IDE runs and linters now see all 39 tests (183 with subtests), which an untagged run used to skip'
+time: '2026-11-26T23:50:03.926183473Z'

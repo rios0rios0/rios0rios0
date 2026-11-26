@@ -7,11 +7,11 @@ Single-file Go app (`main.go` only). Requires Go 1.27+. Direct dependencies: `si
 ## Build and Test Commands
 
 ```bash
-# Run all unit tests (build tag required)
+# Run all unit tests
 make test
 
 # Run a single test by name
-go test -tags=unit -v -count=1 -run TestFunctionName ./...
+go test -v -count=1 -run TestFunctionName ./...
 
 # Generate SVGs locally (requires platform credentials as env vars)
 make generate
@@ -58,7 +58,7 @@ Single-package monolith (`package main` in `main.go`). Key components:
 
 ## Testing
 
-- Build tag `//go:build unit` on all test files; tests won't run without `-tags=unit`
+- No build tag on test files (the team's testing standard bans the `unit` tag): a plain `go test ./...` runs the whole suite
 - Uses `stretchr/testify` for assertions (`assert`, `require`)
 - Tests are parallel (`t.Parallel()` + `t.Run()`)
 - BDD structure with `// given`, `// when`, `// then` comments
